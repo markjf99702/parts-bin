@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#1B6F70"/>
+  <path d="M12 26h40v24a4 4 0 0 1-4 4H16a4 4 0 0 1-4-4z" fill="#F2F1EC"/>
+  <path d="M9 20h46v7H9z" fill="#D9ECEB"/>
+  <rect x="24" y="33" width="16" height="7" rx="2" fill="#1E201D"/>
+  <text x="32" y="38.6" text-anchor="middle" font-family="Courier New, monospace" font-weight="700" font-size="5.6" fill="#F2F1EC">ENV</text>
+  <path d="M27 14l4-4 4 4M31 10v9" stroke="#F2F1EC" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Parts Bin</title>
+  <meta name="description" content="A parts inventory for a maker's workroom: bins, bags and boxes, NFC tags written and read right from the phone, a BOM check against what you have, and Google Drive saving so it's the same on every device.">
+  <meta property="og:title" content="Parts Bin">
+  <meta property="og:description" content="Every part, which bag it's in, and what you can build with it.">
+  <meta property="og:image" content="https://junkdrawer.works/parts-bin/og.png">
+  <meta property="og:url" content="https://junkdrawer.works/parts-bin/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#F2F1EC" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#151716" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="preload" href="fonts/barlow-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/barlow-condensed-600.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<noscript>Parts Bin needs JavaScript to keep the inventory and talk to NFC tags.</noscript>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><h1>Parts Bin</h1><button type="button" class="cloud" id="cloud" hidden></button></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="foot" id="sidefoot"></div>
+  </aside>
+  <main class="main" id="main"></main>
+</div>
+<div class="mobile-cloud"><button type="button" class="cloud" id="cloud-m" hidden></button></div>
+<nav class="tabbar" id="tabbar"></nav>
+<div id="sheet-root"></div>
+<div id="toast" class="toast" hidden></div>
+<div id="print-root"></div>
+<footer class="jd-foot">
+  <a href="https://junkdrawer.works/">Part of junkdrawer.works</a>
+  <span aria-hidden="true">·</span>
+  <a href="https://junkdrawer.works/privacy.html">Privacy</a>
+</footer>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
