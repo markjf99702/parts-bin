@@ -99,11 +99,58 @@ await page.waitForFunction(() => !document.querySelector('.sheet'));
 assert.match((await page.evaluate(() => window.__written))[1], /#bag\/002$/);
 await page.screenshot({ path: join(root, 'docs/phone-pack.png') });
 
-// ---- reading a tag opens that bag
+// ---- Parts → + Part: a new part goes into a new bag and is tagged on save
+await page.goto(base + '#parts');
+await page.click('#addp');
+await page.fill('#p-name', 'M3 heat-set inserts');
+await page.fill('#p-qty', '50');
+assert.ok(await page.isChecked('#p-dotag'));
+assert.equal(await page.textContent('#p-bagshow'), '#003');
+assert.equal(await page.textContent('.sheet #save'), 'Save & tag');
+await page.screenshot({ path: join(root, 'docs/phone-add.png') });
+await page.click('.sheet #save');
+await page.waitForSelector('#tz.wait');
+await page.evaluate(() => window.__tap());
+await page.waitForFunction(() => !document.querySelector('.sheet'));
+assert.match((await page.evaluate(() => window.__written)).at(-1), /#bag\/003$/);
+const ins = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('parts-bin')).items.parts).find(x => x.name === 'M3 heat-set inserts'));
+assert.equal(ins.bag, 3); assert.equal(ins.qty, 50); assert.equal(ins.tagWritten, true);
+// unticking it saves without a bag or a tag
+await page.click('#addp');
+await page.fill('#p-name', 'Loose spare');
+await page.uncheck('#p-dotag');
+await page.fill('#p-bag', '');
+await page.click('.sheet #save');
+await page.waitForFunction(() => !document.querySelector('.sheet'));
+assert.equal((await page.evaluate(() => window.__written)).length, 3);
+
+// ---- reading a tag opens that bag, with no tap first: the page listens while it's open
 await page.goto(base + '#bins');
-await page.click('#readtag');
+await page.reload();
+await page.waitForFunction(() => window.__reader?.onreading);
+assert.ok(await page.$('#readtag.on'), 'the NFC button shows it is listening');
 await page.evaluate(u => window.__read(u), base + '#bag/001');
 await page.waitForSelector('h2:has-text("BME280")');
+// an old tag from the Stockroom artifact opens here too, and offers to rewrite it for Parts Bin
+await page.goto(base + '#bins');
+await page.evaluate(() => window.__read('https://claude.ai/artifact/3tWd7DUCw34ExEy7Jo4CpG#bag/001'));
+await page.waitForSelector('h2:has-text("BME280")');
+await page.waitForSelector('.sheet:has-text("Update this tag?")');
+await page.click('.sheet #go');
+await page.waitForSelector('#tz.wait');
+await page.evaluate(() => window.__tap());
+await page.waitForFunction(() => !document.querySelector('.sheet'));
+assert.equal((await page.evaluate(() => window.__written)).at(-1), base + '#bag/001');
+// the tag just written, still against the phone, doesn't bounce the page around
+await page.goto(base + '#bins');
+await page.evaluate(u => window.__read(u), base + '#bag/001');
+await page.waitForTimeout(300);
+assert.equal(await page.evaluate(() => location.hash), '#bins');
+await page.waitForTimeout(3000);
+// someone else's link is left alone
+await page.evaluate(() => window.__read('https://example.com/#bag/001'));
+await page.waitForSelector('text=That tag isn’t one of yours');
+assert.equal(await page.evaluate(() => location.hash), '#bins');
 
 // ---- BOM check against the inventory
 await page.goto(base + '#bom');
