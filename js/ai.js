@@ -4,11 +4,12 @@
 const KEY = 'parts-bin.ai';
 const get = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
 
-export const DEFAULT_MODEL = 'claude-sonnet-4-5';
+export const DEFAULT_MODEL = 'claude-sonnet-5-5';
+const RETIRED = ['claude-sonnet-4-5']; // a saved choice that Anthropic has since retired moves to the default
 
 export const ai = {
   get key() { return get().key || ''; },
-  get model() { return get().model || DEFAULT_MODEL; },
+  get model() { const m = get().model; return !m || RETIRED.includes(m) ? DEFAULT_MODEL : m; },
   save({ key, model }) {
     try { localStorage.setItem(KEY, JSON.stringify({ key: String(key || '').trim(), model: String(model || '').trim() || DEFAULT_MODEL })); } catch {}
   },

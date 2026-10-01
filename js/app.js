@@ -325,7 +325,7 @@ function renderScan(m){
     if(matched){ base.qty = Number(seed.qty)||matched.qty||1; if(seed.notes && !(matched.notes||'').includes(seed.notes)) base.notes=[matched.notes,seed.notes].filter(Boolean).join(' · '); }
     else base.qty=Number(seed.qty)||1;
     base.bag = nextBag(); if(destId) base.binId=destId;
-    editPart(base, {photoFile:null, stay:true, afterSave:(saved)=>{ reset(); render(); tagSheet(saved,'part',{auto:true}); }});
+    editPart(base, {photoFile:null, stay:true, tag:true, afterSave:()=>{ reset(); render(); }});
   }
   async function identify(){
     const desc=ui.querySelector('#desc').value.trim(); if(!file&&!desc){ toast('Add a photo or a description'); return; }
@@ -412,10 +412,14 @@ function nextBinCode(){
 }
 function editPart(p, opts={}){
   const isNew=!p.id; p={id:id(), name:'', category:'', mpn:'', qty:1, unit:'pcs', minQty:'', binId:'', tags:[], notes:'', link:'', bag:'', from:'', ...p};
+  if(isNew && !p.binId){ const last=localGet('pb.lastbin',''); if(S.bins.has(last)) p.binId=last; }
   const bins=[...S.bins.values()].sort(binCodeSort);
   const cats=[...new Set([...S.parts.values()].map(x=>x.category).filter(Boolean))].sort();
   const {el,close}=sheet(`<h3>${isNew?'New part':'Edit part'}</h3>
     <div class="field"><label for="p-name">Name</label><input id="p-name" value="${esc(p.name)}" placeholder="Seeed XIAO ESP32-S3"></div>
+    <label class="bagtag" for="p-dotag"><input type="checkbox" id="p-dotag" ${!p.bag||opts.tag?'checked':''}>
+      <span class="bt-num" id="p-bagshow">${esc(bagStr(p.bag||nextBag()))}</span>
+      <span class="bt-text">${p.bag?'Rewrite this bag’s tag when I save':'Put it in a new bag and tag it when I save'}<small>${NFC_OK&&!FRAMED?'Have a blank sticker ready; hold it to the top of the phone after you tap Save.':'Tags need Chrome on Android; the bag number is still saved.'}</small></span></label>
     <div class="grid2">
       <div class="field"><label for="p-bin">Bin</label><select id="p-bin"><option value="">— no bin —</option>${bins.map(b=>`<option value="${b.id}" ${b.id===p.binId?'selected':''}>${esc(b.code)} · ${esc(b.name||'')}</option>`).join('')}</select></div>
       <div class="field"><label for="p-cat">Category</label><input id="p-cat" list="cats" value="${esc(p.category)}" placeholder="MCU boards"><datalist id="cats">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
@@ -431,6 +435,9 @@ function editPart(p, opts={}){
     ${opts.photoFile?'<div class="tiny" style="margin-bottom:10px">The scanned photo will be attached.</div>':''}
     <div class="actions">${!isNew?'<button class="btn danger left" id="del">Delete</button>':''}<button class="btn" id="cancel">Cancel</button><button class="btn primary" id="save">Save</button></div>`);
   el.querySelector('#cancel').onclick=close;
+  const dotag=el.querySelector('#p-dotag'), bagIn=el.querySelector('#p-bag'), saveBtn=el.querySelector('#save'), show=el.querySelector('#p-bagshow');
+  const syncTag=()=>{ if(dotag.checked && bagIn.value==='') bagIn.value=String(p.bag||nextBag()); show.textContent=bagStr(Number(bagIn.value)||nextBag()); saveBtn.textContent=dotag.checked&&NFC_OK&&!FRAMED?'Save & tag':'Save'; el.querySelector('.bagtag').classList.toggle('on',dotag.checked); };
+  dotag.onchange=syncTag; bagIn.oninput=syncTag; syncTag();
   el.querySelector('#del')?.addEventListener('click', async()=>{ if(!confirm('Delete this part?')) return; await S.db.doc('parts/'+p.id).delete(); close(); go('parts'); });
   el.querySelector('#save').onclick=async()=>{
     const name=el.querySelector('#p-name').value.trim(); if(!name){ toast('Name is required'); return; }
@@ -443,7 +450,9 @@ function editPart(p, opts={}){
       link:el.querySelector('#p-link').value.trim(), notes:el.querySelector('#p-notes').value.trim(), updatedAt:new Date().toISOString()};
     const pf=opts.photoFile||picked(el,'p'); if(pf && S.assets){ try{ const up=await S.assets.upload(await shrink(pf),{type:'image/jpeg'}); doc.photo=up.id; }catch(e){ toast('Photo not saved: '+(e&&e.code||e&&e.message||'upload failed'),4000); } }
     delete doc.id;
-    try{ await S.db.doc('parts/'+p.id).set(doc); close(); toast(isNew?'Part added':'Saved'); opts.afterSave?.({...doc,id:p.id}); if(isNew&&doc.binId&&!opts.stay) go('bin',doc.binId); }catch(e){ writeFail(e); }
+    const tagNow = dotag.checked && bag!=='';
+    if(isNew) localSet('pb.lastbin', newBin);
+    try{ await S.db.doc('parts/'+p.id).set(doc); close(); if(!tagNow) toast(isNew?'Part added':'Saved'); opts.afterSave?.({...doc,id:p.id}); if(tagNow) tagSheet({...doc,id:p.id},'part',{auto:true}); }catch(e){ writeFail(e); }
   };
 }
 async function writePart(p){ const d={...p}; delete d.id; d.updatedAt=new Date().toISOString(); try{ await S.db.doc('parts/'+p.id).set(d); }catch(e){ writeFail(e); } }
