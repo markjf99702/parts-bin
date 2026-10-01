@@ -202,3 +202,11 @@ a{color:var(--accent-ink)}
 .jd-foot a{color:inherit;text-decoration:none}
 .jd-foot a:hover,.jd-foot a:focus-visible{text-decoration:underline}
 @media(max-width:760px){ body:has(#cloud-m:not([hidden])) .topbar{padding-right:46px} }
+
+.bagtag{display:grid;grid-template-columns:auto auto 1fr;gap:4px 12px;align-items:center;border:2px dashed var(--line);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;cursor:pointer}
+.bagtag.on{border-style:solid;border-color:var(--accent);background:var(--accent-soft)}
+.bagtag input{width:20px;height:20px;accent-color:var(--accent)}
+.bagtag .bt-num{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+.bagtag:not(.on) .bt-num{color:var(--ink3)}
+.bagtag .bt-text{font-weight:600;font-size:14.5px;line-height:1.3}
+.bagtag .bt-text small{display:block;font-weight:400;color:var(--ink2);font-size:12.5px;margin-top:2px}
