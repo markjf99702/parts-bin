@@ -91,7 +91,7 @@ function renderNav(){
   document.getElementById('sidefoot').innerHTML = `${b} bins · ${n} parts${low?` · <span style="color:var(--warn)">${low} low</span>`:''}<br>${S.canWrite?'':'read-only view'}`;
 }
 function topbar(m, title, extra=''){
-  const el=h(`<div class="topbar"><h2>${esc(title)}</h2><div class="search">${ICONS.search}<input id="q" type="search" placeholder="Search parts, bins, bag numbers…" value="${esc(S.q)}" autocomplete="off"></div>${NFC_OK&&!FRAMED?`<button class="btn icon" id="readtag" aria-label="Tap a tag to open it" title="Tap a tag to open it">${ICONS.nfc}</button>`:''}${extra}</div>`);
+  const el=h(`<div class="topbar"><h2>${esc(title)}</h2><div class="search">${ICONS.search}<input id="q" type="search" placeholder="Search parts, bins, bag numbers…" value="${esc(S.q)}" autocomplete="off"></div>${NFC_OK&&!FRAMED?`<button class="btn icon${reading?' on':''}" id="readtag" aria-label="Tap a tag to open it" title="Tap a tag to open it">${ICONS.nfc}</button>`:''}${extra}</div>`);
   m.append(el);
   el.querySelector('#readtag')?.addEventListener('click', readTag);
   const q=el.querySelector('#q'); let t; q.oninput=()=>{ clearTimeout(t); t=setTimeout(()=>{ S.q=q.value; render(); const nq=document.getElementById('q'); if(nq){ nq.focus(); nq.setSelectionRange(nq.value.length,nq.value.length);} },160); };
@@ -481,6 +481,7 @@ function tagSheet(b, kind='bin', opts={}){
     tz.className='tagzone wait'; st.innerHTML='Hold the sticker to the <b>top edge of the phone</b>…';
     try{
       await new NDEFReader().write({records:[{recordType:'url', data:url}]}, {overwrite, signal:ctl.signal});
+      lastWrite=Date.now();
       try{ navigator.vibrate?.(70); }catch{}
       tz.className='tagzone ok'; st.textContent=`${label} tag written.`;
       await S.db.doc((kind==='part'?'parts/':'bins/')+b.id).update({tagWritten:true}).catch(()=>{});
@@ -501,27 +502,69 @@ function tagSheet(b, kind='bin', opts={}){
   if(native){
     el.querySelector('#write').onclick=()=>write(false);
     // When NFC is already allowed, start listening straight away: no extra tap between saving and tagging.
-    if(opts.auto) navigator.permissions?.query({name:'nfc'}).then(p=>{ if(p.state==='granted') write(false); }).catch(()=>{});
+    if(opts.overwrite){ const w=el.querySelector('#write'); w.textContent='Write over it'; w.onclick=()=>write(true); }
+    if(opts.auto) navigator.permissions?.query({name:'nfc'}).then(p=>{ if(p.state==='granted') write(!!opts.overwrite); }).catch(()=>{});
   }
 }
 
-// Hold any tag to the phone: a bag's or bin's tag opens it here.
-let reading=null;
-async function readTag(){
-  if(reading){ reading.abort(); reading=null; toast('Stopped listening'); return; }
-  reading=new AbortController();
+// While Parts Bin is open, it listens for tags the whole time, so a bag's or bin's tag opens here
+// instead of Android offering another app (old tags point at the Stockroom artifact on claude.ai).
+// Chrome pauses the listener when the tab is hidden and resumes it when it comes back.
+// Once NFC is allowed for the site it starts by itself; the first time, the NFC button asks.
+let reading=null, lastWrite=0;
+const OLD_HOSTS=/(^|\.)claude\.ai$/;
+function tagTarget(u){
+  let url; try{ url=new URL(u); }catch{ return null; }
+  const m=/^#(bag|bin|part)\/(.+)$/.exec(url.hash); if(!m) return null;
+  const old=OLD_HOSTS.test(url.hostname);
+  if(!old && !(url.origin+url.pathname===APP_URL || /junkdrawer\.works$|github\.io$/.test(url.hostname))) return null;
+  return { view:m[1], arg:decodeURIComponent(m[2]), old, url:u };
+}
+function findTarget(t){
+  if(t.view==='bin') { const b=S.bins.get(t.arg); return b&&{kind:'bin',item:b}; }
+  if(t.view==='part'){ const p=S.parts.get(t.arg); return p&&{kind:'part',item:p}; }
+  const n=Number(t.arg); const p=[...S.parts.values()].find(x=>Number(x.bag)===n); return p&&{kind:'part',item:p};
+}
+function onTag(ev){
+  if(document.querySelector('#sheet-root .sheet') || Date.now()-lastWrite<3000) return; // writing, or the tag just written
+  const recs=ev.message?.records||[];
+  if(!recs.length) return; // a blank sticker
+  for(const rec of recs){
+    if(rec.recordType!=='url' && rec.recordType!=='absolute-url') continue;
+    const t=tagTarget(new TextDecoder().decode(rec.data)); if(!t) continue;
+    try{ navigator.vibrate?.(40); }catch{}
+    location.hash='#'+t.view+'/'+t.arg;
+    if(t.old){ const hit=findTarget(t); if(hit && S.canWrite) setTimeout(()=>offerRewrite(hit),150); }
+    return;
+  }
+  toast('That tag isn’t one of yours');
+}
+function offerRewrite({kind,item}){
+  const label=kind==='part'?(bagStr(item.bag)||item.name):item.code;
+  const {el,close}=sheet(`<h3>Update this tag?</h3>
+    <p class="muted">${esc(label)}’s tag still points at the old Stockroom artifact on claude.ai, so with Parts Bin closed your phone offers the Claude app. Rewrite it to open Parts Bin instead. Keep it at the top of the phone.</p>
+    <div class="actions"><button class="btn" id="later">Not now</button><button class="btn primary" id="go">${ICONS.nfc} Rewrite tag</button></div>`);
+  el.querySelector('#later').onclick=close;
+  el.querySelector('#go').onclick=()=>{ close(); tagSheet(item,kind,{auto:true,overwrite:true}); };
+}
+async function listen(gesture=false){
+  if(!NFC_OK||FRAMED||reading) return !!reading;
+  if(!gesture){ const st=await navigator.permissions?.query({name:'nfc'}).then(p=>p.state).catch(()=>''); if(st!=='granted') return false; }
+  const ctl=new AbortController(); reading=ctl;
   try{
-    const r=new NDEFReader(); await r.scan({signal:reading.signal});
-    toast('Hold a tag to the top of the phone',3000);
-    r.onreading=ev=>{
-      for(const rec of ev.message.records){
-        if(rec.recordType!=='url') continue;
-        const u=new TextDecoder().decode(rec.data); const hash=u.split('#')[1];
-        if(hash){ reading?.abort(); reading=null; try{ navigator.vibrate?.(40); }catch{} location.hash='#'+hash; return; }
-      }
-      toast('That tag isn’t one of yours');
-    };
-  }catch(e){ reading=null; toast(e.name==='NotAllowedError'?'NFC is blocked for this site':'Couldn’t start NFC: '+(e.message||e.name),4000); }
+    const r=new NDEFReader(); await r.scan({signal:ctl.signal});
+    r.onreading=onTag; r.onreadingerror=()=>{};
+    document.getElementById('readtag')?.classList.add('on');
+    return true;
+  }catch(e){
+    if(reading===ctl) reading=null;
+    if(gesture) toast(e.name==='NotAllowedError'?'NFC is blocked for this site: tap the icon left of the address → Permissions → NFC.':e.name==='NotReadableError'?'NFC looks switched off. Turn it on in the phone’s settings.':'Couldn’t start NFC: '+(e.message||e.name),4500);
+    return false;
+  }
+}
+async function readTag(){
+  const was=!!reading;
+  if(await listen(true)) toast(was?'Listening: hold any tag to the top of the phone':'Listening while Parts Bin is open: hold a tag to the top of the phone',3000);
 }
 
 // ------------------------------------------------------------------ settings
@@ -571,4 +614,6 @@ store.onSave(r=>{ if(r==='full') toast('This browser’s storage is full',4000);
 drive.onUpdate(()=>store.reload());
 drive.chip(document.getElementById('cloud')); drive.chip(document.getElementById('cloud-m'));
 window.addEventListener('storage',e=>{ if(e.key==='parts-bin') store.reload(); });
+listen(); // starts on its own once NFC has been allowed for the site
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') listen(); });
 if('serviceWorker' in navigator && !FRAMED && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
