@@ -13,7 +13,7 @@
 ## How it works
 
 - **Pack.** Pick the bin or box you're filling, type what's in the bag and pick the match (or a new part), check the count, save. The tag screen opens already listening: hold a blank sticker to the phone and it gets that bag's link. The next bag number is waiting.
-- **Tap a tag to find a bag.** The tag button by the search box reads a sticker and opens that bag or bin. Tapping a sticker with the page closed opens it in Chrome.
+- **Tap a tag to find a bag.** While Parts Bin is open it listens for tags, so holding any bag or bin sticker to the phone opens it right here. (The first time, tap the tag button by the search box to allow NFC; after that it starts by itself.) Tags written by the old Stockroom artifact open here too, with an offer to rewrite them so they open Parts Bin even when the page is closed.
 - **BOM check.** Paste a parts list, or pick a saved one, and get have / short / missing with where each part lives, plus a shopping list.
 - **Boxes for a move.** A box is a container like a bin; each part remembers which bin it came out of, and a box page prints its packing list.
 - **Same on every device.** Turn on Google Drive in Settings and the inventory is saved to a "Parts Bin" folder in your Drive and merged part by part with your other devices. Without it, everything stays in this browser.
