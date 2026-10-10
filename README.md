@@ -1,6 +1,6 @@
 # Parts Bin
 
-**Use it: [junkdrawer.works/parts-bin](https://junkdrawer.works/parts-bin/)**
+**Use it: [parts-bin.junkdrawer.works](https://parts-bin.junkdrawer.works/)**
 
 **A parts inventory for a maker's workroom, with the NFC tags written and read right in the page.** Bins, moving boxes and numbered bags, a search over everything, and a BOM check that says what you have, what you're short of and where it is. Log a bag and tag it in one go: save the part, hold the sticker to the top of the phone, next bag. Or skip the typing: send Claude a photo and open the link it replies with.
 
@@ -58,3 +58,4 @@ GitHub Pages serves it from `main`, `/ (root)`.
 - `test/e2e.mjs`, `test/fake-google.mjs`: drive the page with a pretend NFC reader and a stand-in Google Drive.
 - `fonts/`: Barlow, Barlow Condensed and JetBrains Mono, served from here so nothing loads from elsewhere (SIL Open Font License).
 - `sw.js`, `manifest.webmanifest`, `icon*.png`, `icon.svg`: works offline and installs to the home screen.
+- `CNAME`, `carry.js`: Parts Bin has its own address, parts-bin.junkdrawer.works, so it installs as its own app. It used to be at junkdrawer.works/parts-bin/, which forwards here (tags and links written there still work). A browser keeps each address's saves apart, so the first time it opens here `carry.js` brings the inventory over from the old address.

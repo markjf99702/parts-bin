@@ -2,13 +2,14 @@
 // The page keeps working from localStorage exactly as before. When someone turns this on, the inventory goes
 // into one small file in a "Parts Bin" folder in their own Google Drive, and what their other
 // devices saved there is merged back in, item by item (model.js).
-// Nothing about this shows away from junkdrawer.works.
+// Nothing about this shows away from parts-bin.junkdrawer.works.
 import { cleanDoc, canon, mergeDocs, APP } from './model.js';
 import { KEY } from './store.js';
 
 // The junkdrawer.works OAuth client, shared by every junkdrawer.works project. Google only accepts it
-// from this address, so anywhere else (localhost, the single-file copy) nothing about Drive shows.
-const ORIGINS = ['https://junkdrawer.works'];
+// from the addresses it lists, so anywhere else (localhost, the single-file copy) nothing about Drive shows.
+// Parts Bin lives at its own address now; it used to be at junkdrawer.works/parts-bin/, which forwards here.
+const ORIGINS = ['https://parts-bin.junkdrawer.works', 'https://junkdrawer.works'];
 const CLIENT_ID = ORIGINS.includes(location.origin) ? '897653851078-p5jrh2bto6h3bj0lc4jist3k1vsc1pj4.apps.googleusercontent.com' : '';
 // drive.file, like every junkdrawer.works project: Google lets them see only the files they made.
 // Ours are one folder and one file in it, found by their appProperties, never by name.

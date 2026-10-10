@@ -15,8 +15,8 @@ test('a batch survives the trip through a link, a bare code and plain JSON', asy
   const raw = batch([{ name: 'BME280 breakout', qty: 5, iface: ['I2C'], addr: '0x76, 0x77' }]);
   const code = await IN.encode(raw);
   assert.ok(IN.isCode(code));
-  for (const text of ['https://junkdrawer.works/parts-bin/#' + code, code, '  #' + code + '\n', JSON.stringify(raw)]) assert.deepEqual(await IN.read(text), raw);
-  for (const stray of ['.', ')', '%3D', ' and then some words']) assert.deepEqual(await IN.read('https://junkdrawer.works/parts-bin/#' + code + stray), raw, 'a character picked up with the link: ' + stray);
+  for (const text of ['https://parts-bin.junkdrawer.works/#' + code, 'https://junkdrawer.works/parts-bin/#' + code, code, '  #' + code + '\n', JSON.stringify(raw)]) assert.deepEqual(await IN.read(text), raw);
+  for (const stray of ['.', ')', '%3D', ' and then some words']) assert.deepEqual(await IN.read('https://parts-bin.junkdrawer.works/#' + code + stray), raw, 'a character picked up with the link: ' + stray);
   for (const junk of ['', 'hello', 'https://junkdrawer.works/parts-bin/#bag/001', 'p1z!!!!', IN.PREFIX + 'AAAAAAAAAAAA']) await assert.rejects(IN.read(junk));
 });
 

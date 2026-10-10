@@ -1,11 +1,11 @@
 ---
 name: parts-bin-cataloger
-description: Catalog Mark's electronics parts into Parts Bin (junkdrawer.works/parts-bin) from photos of bagged parts, modules or boards, receipts and order emails, product links or a typed list, and fill in details (category, interface, I2C address, voltages, part number, reference photo) for parts already in it, handing either over as a one-tap Inbox link. Use whenever he sends photos of parts to log or bag, mentions an electronics order or receipt, pastes a product link to add, shares a message starting "Parts Bin:", asks to fill in, enrich or categorize his parts, mentions Parts Bin, or asks what parts he has.
+description: Catalog Mark's electronics parts into Parts Bin (parts-bin.junkdrawer.works) from photos of bagged parts, modules or boards, receipts and order emails, product links or a typed list, and fill in details (category, interface, I2C address, voltages, part number, reference photo) for parts already in it, handing either over as a one-tap Inbox link. Use whenever he sends photos of parts to log or bag, mentions an electronics order or receipt, pastes a product link to add, shares a message starting "Parts Bin:", asks to fill in, enrich or categorize his parts, mentions Parts Bin, or asks what parts he has.
 ---
 
 # Parts Bin cataloger
 
-Parts Bin (https://junkdrawer.works/parts-bin/) is Mark's parts inventory: bins, numbered bags with NFC tags, and a BOM check. Its data lives in his browser and in one file in his Google Drive. Your job is to turn what he sends into an accurate batch and hand it over as a **link**. The link opens Parts Bin's **Inbox**, where each part is a card: he taps it, the part sheet opens filled in, he taps **Save & tag** and holds the bag's sticker to the phone. Suggested details for parts he already has arrive the same way, as cards to apply or skip. Nothing reaches the inventory without his tap.
+Parts Bin (https://parts-bin.junkdrawer.works/) is Mark's parts inventory: bins, numbered bags with NFC tags, and a BOM check. Its data lives in his browser and in one file in his Google Drive. Your job is to turn what he sends into an accurate batch and hand it over as a **link**. The link opens Parts Bin's **Inbox**, where each part is a card: he taps it, the part sheet opens filled in, he taps **Save & tag** and holds the bag's sticker to the phone. Suggested details for parts he already has arrive the same way, as cards to apply or skip. Nothing reaches the inventory without his tap.
 
 Protect three things:
 - **Accuracy over completeness.** A wrong part number on a bag is worse than a blank. Never invent a marking, a count, an address, a voltage or a web address. Blank beats wrong.
@@ -174,7 +174,7 @@ import argparse, base64, datetime, hashlib, json, re, sys, zlib
 from pathlib import Path
 from urllib.parse import urlparse
 
-BASE = 'https://junkdrawer.works/parts-bin/'
+BASE = 'https://parts-bin.junkdrawer.works/'
 SOURCES = ('photo', 'receipt', 'link', 'list', 'details')
 IFACE = {
     'i2c': 'I2C', 'iic': 'I2C', 'twi': 'I2C', 'qwiic': 'I2C', 'stemma qt': 'I2C', 'spi': 'SPI', 'uart': 'UART', 'serial': 'UART', 'ttl': 'UART',

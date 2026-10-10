@@ -3,7 +3,7 @@
 //
 //   import { fakeGoogle } from './fake-google.mjs';
 //   const g = fakeGoogle();
-//   await g.install(ctx, { rewrite: { '**/sync.js': s => s.replace("['https://junkdrawer.works']", "['https://junkdrawer.works', 'http://localhost:8080']") } });
+//   await g.install(ctx, { rewrite: { '**/sync.js': s => s.replace("['https://parts-bin.junkdrawer.works', 'https://junkdrawer.works']", "['https://parts-bin.junkdrawer.works', 'http://localhost:8080']") } });
 //   … g.files() lists what's in the fake Drive; g.calls records every request.
 //
 // Sign-in: the fake google.accounts.oauth2 answers every requestAccessToken() with the token 'tok-' + the

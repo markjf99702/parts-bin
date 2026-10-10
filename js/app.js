@@ -43,7 +43,7 @@ function assetUrl(idv){ return idv ? '/_blob/'+idv : ''; }
 function isBox(b){ return !!b && b.kind==='box'; }
 function nextBag(){ let m=0; for(const p of S.parts.values()) if(Number(p.bag)>m) m=Number(p.bag); return m+1; }
 function bagStr(n){ return n ? '#'+String(n).padStart(3,'0') : ''; }
-const APP_URL = location.protocol==='file:' ? 'https://junkdrawer.works/parts-bin/' : location.origin+location.pathname;
+const APP_URL = location.protocol==='file:' ? 'https://parts-bin.junkdrawer.works/' : location.origin+location.pathname;
 const NFC_OK = ('NDEFReader' in window);
 const FRAMED = (()=>{ try{ return window.self!==window.top; }catch{ return true; } })();
 function partUrl(p){ return APP_URL+(p.bag?'#bag/'+String(p.bag).padStart(3,'0'):'#part/'+p.id); }
@@ -800,7 +800,7 @@ async function sendToClaude(parts){
 function renderSettings(m){
   m.append(h('<div class="topbar"><h2>Settings</h2></div>'));
   const dc=h('<section class="card" id="drivecard"></section>'); m.append(dc);
-  if(drive.ready) drive.card(dc); else dc.innerHTML='<h3>Save across devices</h3><p class="muted">Google Drive saving works at junkdrawer.works/parts-bin. Here the inventory stays in this browser.</p>';
+  if(drive.ready) drive.card(dc); else dc.innerHTML='<h3>Save across devices</h3><p class="muted">Google Drive saving works at parts-bin.junkdrawer.works. Here the inventory stays in this browser.</p>';
   const aic=h(`<section class="card"><h3>Photo identification <span class="tiny">optional</span></h3>
     <p class="muted">With your own Anthropic API key, the camera button in Pack identifies a part from a photo and BOM check can match loosely worded lists. The key is kept in this browser only and sent only to Anthropic; calls are billed to your API account, not a Claude plan. Each device needs it entered once.</p>
     <div class="grid2"><div class="field"><label for="ai-key">API key</label><input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" value="${esc(ai.key)}"></div>
