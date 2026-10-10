@@ -151,7 +151,7 @@ function renderBin(m, binId){
   const b=S.bins.get(binId);
   if(!b){ m.append(h(`<div class="empty"><h3>Bin not found</h3><p>This tag or link points at a bin that no longer exists.</p><button class="btn" id="bk">All bins</button></div>`)); m.querySelector('#bk').onclick=()=>go('bins'); return; }
   const ps=partsInBin(binId);
-  const head=h(`<div class="row" style="margin-bottom:10px"><button class="btn icon" id="back" aria-label="Back to bins">${ICONS.back}</button><span class="grow"></span>
+  const head=h(`<div class="row pagehead" style="margin-bottom:10px"><button class="btn icon" id="back" aria-label="Back to bins">${ICONS.back}</button><span class="grow"></span>
     <button class="btn sm" id="print">Print list</button><button class="btn sm" id="copy">Copy list</button>
     ${S.canWrite?`<button class="btn sm" id="tag">${ICONS.nfc} Tag</button><button class="btn sm" id="edit">Edit</button>${isBox(b)?`<button class="btn primary sm" id="pack">${ICONS.scan} Pack into this box</button>`:`<button class="btn primary sm" id="add">${ICONS.plus} Part</button>`}`:''}</div>`);
   m.append(head);
@@ -199,7 +199,7 @@ function renderParts(m){
 function renderPartPage(m, pid){
   const p=S.parts.get(pid); if(!p){ m.append(h('<div class="empty"><p>Part not found.</p></div>')); return; }
   const b=binOf(p);
-  const head=h(`<div class="row" style="margin-bottom:10px"><button class="btn icon" id="back" aria-label="Back">${ICONS.back}</button><span class="grow"></span>${S.canWrite?`<button class="btn sm" id="edit">Edit</button>`:''}</div>`);
+  const head=h(`<div class="row pagehead" style="margin-bottom:10px"><button class="btn icon" id="back" aria-label="Back">${ICONS.back}</button><span class="grow"></span>${S.canWrite?`<button class="btn sm" id="edit">Edit</button>`:''}</div>`);
   m.append(head); head.querySelector('#back').onclick=()=>history.length>1?history.back():go('parts');
   head.querySelector('#edit')?.addEventListener('click',()=>editPart(p));
   if(S.canWrite){ const tg=h(`<button class="btn sm">${ICONS.nfc} Bag tag</button>`); tg.onclick=()=>tagSheet(p,'part'); head.querySelector('#edit').before(tg); }
@@ -461,6 +461,11 @@ async function shrink(file){
   try{ const bmp=await createImageBitmap(file); const max=1280; const s=Math.min(1,max/Math.max(bmp.width,bmp.height)); const c=document.createElement('canvas'); c.width=Math.round(bmp.width*s); c.height=Math.round(bmp.height*s); c.getContext('2d').drawImage(bmp,0,0,c.width,c.height); return await new Promise(r=>c.toBlob(b=>r(b||file),'image/jpeg',.82)); }catch{ return file; }
 }
 function tagSheet(b, kind='bin', opts={}){
+  // A part tagged from its own page may not be in a numbered bag yet. It gets the next number here, so the tag
+  // carries the bag link; the number is saved with the part once the tag is written or its link is handed out.
+  const newBag = kind==='part' && !b.bag ? nextBag() : 0;
+  if(newBag) b={...b, bag:newBag};
+  const claim=()=>newBag ? S.db.doc('parts/'+b.id).update({bag:newBag}).catch(()=>{}) : Promise.resolve();
   const url = kind==='part' ? partUrl(b) : binUrl(b);
   const label = kind==='part' ? (bagStr(b.bag)||b.name) : b.code;
   const native = NFC_OK && !FRAMED;
@@ -474,7 +479,7 @@ function tagSheet(b, kind='bin', opts={}){
   let ctl=null;
   const finish=()=>{ ctl?.abort(); close(); };
   el.querySelector('#done').onclick=finish;
-  el.querySelector('#copy').onclick=()=>{ navigator.clipboard?.writeText(url).then(()=>toast('Link copied'),()=>toast(url,4000)); };
+  el.querySelector('#copy').onclick=()=>{ claim(); navigator.clipboard?.writeText(url).then(()=>toast('Link copied'),()=>toast(url,4000)); };
   const st=el.querySelector('#t-status'), tz=el.querySelector('#tz');
   async function write(overwrite=false){
     ctl?.abort(); ctl=new AbortController();
@@ -484,7 +489,7 @@ function tagSheet(b, kind='bin', opts={}){
       lastWrite=Date.now();
       try{ navigator.vibrate?.(70); }catch{}
       tz.className='tagzone ok'; st.textContent=`${label} tag written.`;
-      await S.db.doc((kind==='part'?'parts/':'bins/')+b.id).update({tagWritten:true}).catch(()=>{});
+      await S.db.doc((kind==='part'?'parts/':'bins/')+b.id).update(newBag?{tagWritten:true, bag:newBag}:{tagWritten:true}).catch(()=>{});
       el.querySelector('#done').textContent = kind==='part' ? 'Next bag' : 'Done';
       setTimeout(()=>{ if(el.isConnected) close(); toast(`${label} tagged`); }, 900);
     }catch(e){
@@ -499,6 +504,7 @@ function tagSheet(b, kind='bin', opts={}){
       else st.textContent='Couldn’t write it ('+(e.message||e.name)+'). Hold it flat and still, then tap Write tag.';
     }
   }
+  if(!native) el.querySelector('a.btn.primary').addEventListener('click', claim);
   if(native){
     el.querySelector('#write').onclick=()=>write(false);
     // When NFC is already allowed, start listening straight away: no extra tap between saving and tagging.

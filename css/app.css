@@ -202,7 +202,7 @@ a{color:var(--accent-ink)}
 .jd-foot{text-align:center;font-size:12.5px;color:var(--ink3);padding:30px 0 8px}
 .jd-foot a{color:inherit;text-decoration:none}
 .jd-foot a:hover,.jd-foot a:focus-visible{text-decoration:underline}
-@media(max-width:760px){ body:has(#cloud-m:not([hidden])) .topbar{padding-right:46px} }
+@media(max-width:760px){ body:has(#cloud-m:not([hidden])) :is(.topbar,.pagehead){padding-right:46px} }
 
 .bagtag{display:grid;grid-template-columns:auto auto 1fr;gap:4px 12px;align-items:center;border:2px dashed var(--line);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;cursor:pointer}
 .bagtag.on{border-style:solid;border-color:var(--accent);background:var(--accent-soft)}

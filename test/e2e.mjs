@@ -124,6 +124,32 @@ await page.click('.sheet #save');
 await page.waitForFunction(() => !document.querySelector('.sheet'));
 assert.equal((await page.evaluate(() => window.__written)).length, 3);
 
+// ---- Bag tag on the page of a part that has no bag yet: it gets the next number, and the tag carries it
+const spareId = await page.evaluate(() => Object.entries(JSON.parse(localStorage.getItem('parts-bin')).items.parts).find(([, x]) => x.name === 'Loose spare')[0]);
+const spare = () => page.evaluate(id => JSON.parse(localStorage.getItem('parts-bin')).items.parts[id], spareId);
+await page.goto(base + '#part/' + spareId);
+await page.click('text=Bag tag');
+assert.match(await page.textContent('.sheet h3'), /#004/);
+// looking at the sheet and backing out takes no number
+await page.click('.sheet #done');
+assert.ok(!(await spare()).bag);
+await page.click('text=Bag tag');
+await page.click('.sheet #write');
+await page.waitForSelector('#tz.wait');
+await page.evaluate(() => window.__tap());
+await page.waitForFunction(() => !document.querySelector('.sheet'));
+assert.equal((await page.evaluate(() => window.__written)).at(-1), base + '#bag/004');
+assert.equal((await spare()).bag, 4); assert.equal((await spare()).tagWritten, true);
+assert.equal(await page.textContent('.binhead .bagno'), '#004');
+// tagging it again keeps its number
+await page.click('text=Bag tag');
+await page.click('.sheet #write');
+await page.waitForSelector('#tz.wait');
+await page.evaluate(() => window.__tap());
+await page.waitForFunction(() => !document.querySelector('.sheet'));
+assert.equal((await page.evaluate(() => window.__written)).at(-1), base + '#bag/004');
+assert.equal((await spare()).bag, 4);
+
 // ---- reading a tag opens that bag, with no tap first: the page listens while it's open
 await page.goto(base + '#bins');
 await page.reload();
@@ -188,6 +214,14 @@ await page.waitForFunction(() => JSON.parse(localStorage.getItem('parts-bin')).i
 await page.goto(base + '#bins');
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 await page.screenshot({ path: join(root, 'docs/phone-bins.png') });
+// the Drive button in the corner doesn't sit on top of a page's own buttons
+const clear = sel => page.evaluate(sel => { const r = e => e.getBoundingClientRect(), c = r(document.querySelector('#cloud-m')), x = r(document.querySelector(sel)); return c.width > 0 && (x.right <= c.left || x.bottom <= c.top); }, sel);
+await page.goto(base + '#part/p-bme280');
+await page.waitForSelector('#edit');
+assert.ok(await clear('#edit'), 'the Drive button covers Edit on a part page');
+await page.goto(base + '#bin/bin-env');
+await page.waitForSelector('#add');
+assert.ok(await clear('#add'), 'the Drive button covers a button on a bin page');
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 
