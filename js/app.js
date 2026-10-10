@@ -2,6 +2,7 @@
 import { db as localDb, store } from './store.js';
 import { drive } from './sync.js';
 import { ai, makeSample, DEFAULT_MODEL } from './ai.js';
+import * as IN from './inbox.js';
 // ------------------------------------------------------------------ state
 const S = {
   db: null, user: null, sample: null, assets: null, downloads: null,
@@ -22,6 +23,7 @@ const ICONS = {
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
   camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5a3 3 0 006 0h5"/></svg>',
 };
 const NAV = [['bins','Bins'],['parts','Parts'],['bom','BOM check'],['scan','Pack'],['settings','Settings']];
 
@@ -55,7 +57,7 @@ function searchParts(q){
   const bm=String(q||'').trim().match(/^#?0*(\d{1,4})$/); if(bm){ const hit=[...S.parts.values()].filter(p=>Number(p.bag)===Number(bm[1])); if(hit.length) return hit; }
   const t=norm(q).split(' ').filter(Boolean); if(!t.length) return [...S.parts.values()];
   return [...S.parts.values()].map(p=>{
-    const hay = norm([p.name,p.mpn,p.category,(p.tags||[]).join(' '),p.notes,binOf(p)?.code,binOf(p)?.name, p.bag?('bag '+p.bag+' '+String(p.bag).padStart(3,'0')):''].join(' '));
+    const hay = norm([p.name,p.mpn,p.category,(p.tags||[]).join(' '),p.notes,(p.iface||[]).join(' '),p.addr,p.volts,p.logic,binOf(p)?.code,binOf(p)?.name, p.bag?('bag '+p.bag+' '+String(p.bag).padStart(3,'0')):''].join(' '));
     let score=0; for(const w of t){ if(!hay.includes(w)) return null; score += norm(p.name).includes(w)?2:1; if(norm(p.name).startsWith(w)) score+=2; }
     return {p,score};
   }).filter(Boolean).sort((a,b)=>b.score-a.score||a.p.name.localeCompare(b.p.name)).map(x=>x.p);
@@ -66,12 +68,16 @@ function searchBins(q){
 }
 
 // ------------------------------------------------------------------ render
+let wasInbox=false;
 function render(){
   S.route = parseHash();
   renderNav();
   const m=document.getElementById('main'); m.innerHTML='';
   if(!S.loaded){ m.append(h('<div class="empty"><p>Loading inventory…</p></div>')); return; }
   const v=S.route.view;
+  if(linkCode()){ m.append(h('<div class="empty"><p class="think" style="justify-content:center">Opening the batch…</p></div>')); return; }
+  if(v==='inbox'){ const y=wasInbox?window.scrollY:0; wasInbox=true; renderInbox(m); window.scrollTo(0,y); return; }
+  wasInbox=false;
   if(v==='bag'){ const n=Number(S.route.arg); const hit=[...S.parts.values()].find(p=>Number(p.bag)===n); if(hit){ renderPartPage(m, hit.id); window.scrollTo(0,0); return; } m.append(h(`<div class="empty"><h3>No bag ${esc(bagStr(n))}</h3><p>Nothing in the inventory has that bag number yet.</p></div>`)); return; }
   if(v==='settings'){ renderSettings(m); window.scrollTo(0,0); return; }
   if(v==='bin') renderBin(m, S.route.arg);
@@ -83,8 +89,9 @@ function render(){
   window.scrollTo(0,0);
 }
 function renderNav(){
-  const cur = {bin:'bins',part:'parts'}[S.route.view] || S.route.view;
-  const mk = (cls)=>NAV.map(([k,l])=>`<button type="button" data-go="${k}" ${cur===k?'aria-current="page"':''}>${ICONS[k]}<span>${l}</span></button>`).join('');
+  const cur = {bin:'bins',part:'parts',inbox:'scan'}[S.route.view] || S.route.view;
+  const waiting = inboxCount();
+  const mk = (cls)=>NAV.map(([k,l])=>`<button type="button" data-go="${k}" ${cur===k?'aria-current="page"':''}>${ICONS[k]}<span>${l}</span>${k==='scan'&&waiting?`<span class="badge" aria-label="${waiting} waiting in the inbox">${waiting}</span>`:''}</button>`).join('');
   document.getElementById('nav').innerHTML = mk(); document.getElementById('tabbar').innerHTML = mk();
   document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
   const n=S.parts.size, b=S.bins.size, low=[...S.parts.values()].filter(isLow).length;
@@ -142,7 +149,7 @@ function binRow(b){
 }
 function partRow(p, showBin){
   const b=binOf(p);
-  const r=h(`<button type="button" class="item ${isLow(p)?'low':''}"><div><div class="t">${esc(p.name)}</div><div class="s">${p.bag?`<span class="bagno">${bagStr(p.bag)}</span>`:''}${showBin&&b?`<span class="label ${isBox(b)?'box':''}">${esc(b.code)}</span>`:''}${p.category?`<span>${esc(p.category)}</span>`:''}${p.mpn?`<span class="mono">${esc(p.mpn)}</span>`:''}${(p.tags||[]).slice(0,3).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div></div><div class="q">${esc(fmtQty(p))}${isLow(p)?'<small>low</small>':''}</div></button>`);
+  const r=h(`<button type="button" class="item ${isLow(p)?'low':''}"><div><div class="t">${esc(p.name)}</div><div class="s">${p.bag?`<span class="bagno">${bagStr(p.bag)}</span>`:''}${showBin&&b?`<span class="label ${isBox(b)?'box':''}">${esc(b.code)}</span>`:''}${p.category?`<span>${esc(p.category)}</span>`:''}${p.mpn?`<span class="mono">${esc(p.mpn)}</span>`:''}${(p.tags||[]).slice(0,3).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}${p.check?'<span class="chip warn">check</span>':''}</div></div><div class="q">${esc(fmtQty(p))}${isLow(p)?'<small>low</small>':''}</div></button>`);
   r.onclick=()=>go('part',p.id); return r;
 }
 
@@ -186,11 +193,11 @@ function printList(b, ps){
 function renderParts(m){
   const cats=[...new Set([...S.parts.values()].map(p=>p.category).filter(Boolean))].sort();
   const cur=localGet('sr.cat','');
-  const tb=topbar(m,'Parts', `<select id="cat" style="width:auto"><option value="">All categories</option>${cats.map(c=>`<option ${c===cur?'selected':''}>${esc(c)}</option>`).join('')}<option value="__low" ${cur==='__low'?'selected':''}>Low stock</option><option value="__unbagged" ${cur==='__unbagged'?'selected':''}>Not yet bagged</option><option value="__bagged" ${cur==='__bagged'?'selected':''}>Bagged</option></select>${S.canWrite?`<button class="btn primary" id="addp">${ICONS.plus} Part</button>`:''}`);
+  const tb=topbar(m,'Parts', `<select id="cat" style="width:auto"><option value="">All categories</option>${cats.map(c=>`<option ${c===cur?'selected':''}>${esc(c)}</option>`).join('')}<option value="__low" ${cur==='__low'?'selected':''}>Low stock</option><option value="__unbagged" ${cur==='__unbagged'?'selected':''}>Not yet bagged</option><option value="__bagged" ${cur==='__bagged'?'selected':''}>Bagged</option><option value="__check" ${cur==='__check'?'selected':''}>To check</option></select>${S.canWrite?`<button class="btn primary" id="addp">${ICONS.plus} Part</button>`:''}`);
   tb.querySelector('#cat').onchange=e=>{ localSet('sr.cat',e.target.value); render(); };
   tb.querySelector('#addp')?.addEventListener('click',()=>editPart({}));
   let parts=searchParts(S.q);
-  if(cur==='__low') parts=parts.filter(isLow); else if(cur==='__unbagged') parts=parts.filter(p=>!p.bag); else if(cur==='__bagged') parts=parts.filter(p=>p.bag); else if(cur) parts=parts.filter(p=>p.category===cur);
+  if(cur==='__low') parts=parts.filter(isLow); else if(cur==='__unbagged') parts=parts.filter(p=>!p.bag); else if(cur==='__bagged') parts=parts.filter(p=>p.bag); else if(cur==='__check') parts=parts.filter(p=>p.check); else if(cur) parts=parts.filter(p=>p.category===cur);
   if(cur==='__bagged') parts.sort((a,b)=>Number(a.bag)-Number(b.bag));
   if(!S.q) parts.sort((a,b)=>a.name.localeCompare(b.name));
   if(!parts.length){ m.append(h('<div class="empty"><p>No parts here yet. Add one, or use Scan in to photograph a part and let it be identified.</p></div>')); return; }
@@ -203,12 +210,13 @@ function renderPartPage(m, pid){
   m.append(head); head.querySelector('#back').onclick=()=>history.length>1?history.back():go('parts');
   head.querySelector('#edit')?.addEventListener('click',()=>editPart(p));
   if(S.canWrite){ const tg=h(`<button class="btn sm">${ICONS.nfc} Bag tag</button>`); tg.onclick=()=>tagSheet(p,'part'); head.querySelector('#edit').before(tg); }
-  m.append(h(`<div class="binhead"><div class="photo">${p.photo?`<img src="${assetUrl(p.photo)}" alt="">`:ICONS.parts}</div><div>
+  const ref=!p.photo&&p.img;
+  m.append(h(`<div class="binhead"><div class="photo${ref?' refphoto':''}"${ref?' role="button" tabindex="0" aria-label="Reference photo, tap to enlarge"':''}>${p.photo?`<img src="${assetUrl(p.photo)}" alt="">`:ICONS.parts+refImg(p)}</div><div>
     <h2>${esc(p.name)}</h2>
-    <div class="row" style="gap:6px;margin:4px 0 8px">${p.category?`<span class="chip">${esc(p.category)}</span>`:''}${(p.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}${isLow(p)?'<span class="chip warn">low stock</span>':''}</div>
+    <div class="row" style="gap:6px;margin:4px 0 8px">${p.category?`<span class="chip">${esc(p.category)}</span>`:''}${specChips(p)}${(p.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}${isLow(p)?'<span class="chip warn">low stock</span>':''}</div>
     <div class="muted">${p.bag?`<span class="bagno">${bagStr(p.bag)}</span> `:''}${b?`In <a href="#bin/${b.id}"><span class="label ${isBox(b)?'box':''}">${esc(b.code)}</span></a> ${esc(b.name||'')}${b.location?` · ${esc(b.location)}`:''}`:'Not in a bin'}${p.from?` <span class="tiny">· was in ${esc(p.from)}</span>`:''}</div>
     ${p.mpn?`<div class="tiny mono" style="margin-top:4px">${esc(p.mpn)}</div>`:''}
-    ${p.link?`<div class="tiny" style="margin-top:4px"><a href="${esc(p.link)}" target="_blank" rel="noopener">Product link</a></div>`:''}
+    ${/^https?:\/\//i.test(p.link||'')?`<div class="tiny" style="margin-top:4px"><a href="${esc(p.link)}" target="_blank" rel="noopener">Product link</a></div>`:''}
   </div></div>`));
   if(S.canWrite){
     const q=h(`<div class="row" style="margin:6px 0 14px"><span class="muted">Quantity</span><div class="qty"><button class="btn icon" id="dec" aria-label="Use one">−</button><input id="qv" type="number" step="any" value="${esc(p.qty??0)}"><button class="btn icon" id="inc" aria-label="Add one">+</button></div><span class="tiny">${esc(p.unit||'pcs')}${p.minQty!=null&&p.minQty!==''?` · reorder at ${esc(p.minQty)}`:''}</span></div>`);
@@ -217,7 +225,15 @@ function renderPartPage(m, pid){
     q.querySelector('#dec').onclick=()=>save(Number(inp.value)-1); q.querySelector('#inc').onclick=()=>save(Number(inp.value)+1);
     inp.onchange=()=>save(inp.value);
   } else m.append(h(`<div class="muted" style="margin-bottom:12px">Quantity: ${esc(fmtQty(p))}</div>`));
+  if(p.check){
+    const c=h(`<div class="checknote"><div><b>Check before trusting it.</b> ${esc(p.check)}</div>${S.canWrite?'<button class="btn sm" id="checked">Checked, it’s right</button>':''}</div>`);
+    c.querySelector('#checked')?.addEventListener('click',async()=>{ try{ await S.db.doc('parts/'+p.id).update({check:''}); toast('Marked as checked'); }catch(e){ writeFail(e); } });
+    m.append(c);
+  }
   if(p.notes) m.append(h(`<div class="note">${esc(p.notes)}</div>`));
+  if(S.canWrite && lacksDetails(p)){ const ask=h(`<div class="row" style="margin-top:14px"><button class="btn sm" id="ask">Ask Claude for details</button><span class="tiny">Interface, voltages, a part number, a reference photo</span></div>`); ask.querySelector('#ask').onclick=()=>sendToClaude([p]); m.append(ask); }
+  const rp=m.querySelector('.refphoto'); if(rp){ rp.onclick=()=>zoomRef(p); rp.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); zoomRef(p); } }; }
+  wireRefs(m);
 }
 
 // ---- BOM check
@@ -291,19 +307,20 @@ Reply with only a JSON array, same order and length as the BOM lines: [{"id": "<
 
 // ---- Pack (scan-in with a sticky destination container)
 function renderScan(m){
-  m.append(h('<div class="topbar"><h2>Pack</h2></div>'));
+  const tb=h(`<div class="topbar"><h2>Pack</h2>${S.canWrite?`<button class="btn" id="toinbox">${ICONS.inbox} Inbox${inboxCount()?` <span class="count">${inboxCount()}</span>`:''}</button>`:''}</div>`);
+  m.append(tb); tb.querySelector('#toinbox')?.addEventListener('click',()=>go('inbox'));
   if(!S.canWrite){ m.append(h('<div class="empty"><p>This view is read-only.</p></div>')); return; }
   const conts=[...S.bins.values()].sort((x,y)=>(isBox(y)-isBox(x))||binCodeSort(x,y));
   let dest=localGet('sr.packbox',''); if(!S.bins.has(dest)) dest='';
   const nb=nextBag();
   const head=h(`<div class="packhead">
-    <div><div class="lbl">Packing into</div><div class="row" style="margin-top:4px"><select id="dest" style="width:auto;max-width:70vw"><option value="">— pick a box or bin —</option>${conts.map(c=>`<option value="${c.id}" ${c.id===dest?'selected':''}>${esc(c.code)} · ${esc(c.name||'')}</option>`).join('')}</select><button class="btn sm" id="newbox">${ICONS.plus} Box</button></div></div>
+    <div><div class="lbl">Packing into</div><div class="row" style="margin-top:4px"><select id="dest" style="flex:1 1 170px;min-width:0;width:auto"><option value="">— pick a box or bin —</option>${conts.map(c=>`<option value="${c.id}" ${c.id===dest?'selected':''}>${esc(c.code)} · ${esc(c.name||'')}</option>`).join('')}</select><button class="btn sm" id="newbox">${ICONS.plus} Box</button></div></div>
     <div style="text-align:right"><div class="lbl">Next bag</div><div class="big">${bagStr(nb)}</div></div></div>`);
   m.append(head);
   head.querySelector('#dest').onchange=e=>{ localSet('sr.packbox',e.target.value); };
   head.querySelector('#newbox').onclick=()=>{ localSet('sr.newkind','box'); editBin(null); };
   const ui=h(`<div>
-    <div class="note" style="margin-bottom:12px">Bag it and ${S.imgOk?'photograph it, or ':''}type what it is. Pick the matching part (or a new one), check the count, save, then hold the bag's sticker to the top of the phone. ${S.imgOk?'':'Add an Anthropic API key in Settings to identify parts from a photo.'}</div>
+    <div class="note" style="margin-bottom:12px">Bag it and ${S.imgOk?'photograph it, or ':''}type what it is. Pick the matching part (or a new one), check the count, save, then hold the bag's sticker to the top of the phone. ${S.imgOk?'':'To skip the typing, send Claude a photo of the bags and open the link it replies with: they land in the Inbox, filled in.'}</div>
     ${S.imgOk?`<div class="drop" id="drop">${ICONS.camera}<div class="row" style="justify-content:center;margin-top:8px"><label class="btn primary" for="file">Take photo<input id="file" type="file" accept="image/*" capture="environment" class="sr"></label><label class="btn" for="file2">Choose photo<input id="file2" type="file" accept="image/*" class="sr"></label></div><div class="tiny" style="margin-top:6px">Bag contents, label, or silkscreen</div></div>`:''}
     <div class="field" style="margin-top:12px"><label for="desc">${S.imgOk?'Or type it':'What is it?'}</label><input id="desc" placeholder="e.g. BME280, or 'soldering iron'" autocomplete="off"></div>
     <div class="row">${S.sample?'<button class="btn" id="identify">Identify</button>':''}<span id="status" class="tiny"></span></div>
@@ -431,6 +448,16 @@ function editPart(p, opts={}){
     </div>
     <div class="field"><label for="p-link">Link</label><input id="p-link" type="url" value="${esc(p.link||'')}" placeholder="https://"></div>
     <div class="field"><label for="p-notes">Notes</label><textarea id="p-notes" style="min-height:70px">${esc(p.notes)}</textarea></div>
+    <details class="more" ${(p.iface||[]).length||p.addr||p.volts||p.logic||p.img||p.check?'open':''}><summary>Specs and reference photo</summary>
+      <div class="grid2">
+        <div class="field"><label for="p-iface">Interface</label><input id="p-iface" value="${esc((p.iface||[]).join(', '))}" placeholder="I2C, SPI, UART, analog…"></div>
+        <div class="field"><label for="p-addr">I2C address</label><input id="p-addr" class="mono" value="${esc(p.addr||'')}" placeholder="0x76"></div>
+        <div class="field"><label for="p-volts">Supply voltage</label><input id="p-volts" value="${esc(p.volts||'')}" placeholder="3.3–5 V"></div>
+        <div class="field"><label for="p-logic">Logic level</label><input id="p-logic" value="${esc(p.logic||'')}" placeholder="3.3 V"></div>
+      </div>
+      <div class="field"><label for="p-img">Reference photo link</label><input id="p-img" type="url" value="${esc(p.img||'')}" placeholder="https://"></div>
+      <div class="field"><label for="p-check">To check (leave empty once you have)</label><input id="p-check" value="${esc(p.check||'')}"></div>
+    </details>
     ${S.assets&&!opts.photoFile?`<div class="field"><label>Photo</label><div class="row"><label class="btn sm" for="p-cam">${ICONS.camera} Take photo<input id="p-cam" type="file" accept="image/*" capture="environment" class="sr"></label><label class="btn sm" for="p-pick">Choose photo<input id="p-pick" type="file" accept="image/*" class="sr"></label><img id="p-prev" alt="" style="height:40px;border-radius:4px" hidden></div></div>`:''}
     ${opts.photoFile?'<div class="tiny" style="margin-bottom:10px">The scanned photo will be attached.</div>':''}
     <div class="actions">${!isNew?'<button class="btn danger left" id="del">Delete</button>':''}<button class="btn" id="cancel">Cancel</button><button class="btn primary" id="save">Save</button></div>`);
@@ -445,9 +472,12 @@ function editPart(p, opts={}){
     const from = (oldB && !isBox(oldB) && isBox(nb)) ? oldB.code : (p.from||'');
     const bagv=el.querySelector('#p-bag').value; const bag = bagv===''?'':Number(bagv);
     if(bag!=='' && [...S.parts.values()].some(x=>x.id!==p.id && Number(x.bag)===bag)){ toast(`Bag ${bagStr(bag)} is already used`); return; }
+    const imgv=el.querySelector('#p-img').value.trim(), img=IN.httpsUrl(imgv);
+    if(imgv && !img){ toast('The photo link needs to start with https://',3000); return; }
     const doc={...p, name, bag, from, binId:newBin, category:el.querySelector('#p-cat').value.trim(), qty:Number(el.querySelector('#p-qty').value)||0, unit:el.querySelector('#p-unit').value.trim()||'pcs',
       minQty:el.querySelector('#p-min').value===''?'':Number(el.querySelector('#p-min').value), mpn:el.querySelector('#p-mpn').value.trim(), tags:el.querySelector('#p-tags').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),
-      link:el.querySelector('#p-link').value.trim(), notes:el.querySelector('#p-notes').value.trim(), updatedAt:new Date().toISOString()};
+      link:el.querySelector('#p-link').value.trim(), notes:el.querySelector('#p-notes').value.trim(), updatedAt:new Date().toISOString(),
+      iface:IN.ifaces(el.querySelector('#p-iface').value), addr:el.querySelector('#p-addr').value.trim(), volts:el.querySelector('#p-volts').value.trim(), logic:el.querySelector('#p-logic').value.trim(), img, check:el.querySelector('#p-check').value.trim()};
     const pf=opts.photoFile||picked(el,'p'); if(pf && S.assets){ try{ const up=await S.assets.upload(await shrink(pf),{type:'image/jpeg'}); doc.photo=up.id; }catch(e){ toast('Photo not saved: '+(e&&e.code||e&&e.message||'upload failed'),4000); } }
     delete doc.id;
     const tagNow = dotag.checked && bag!=='';
@@ -465,23 +495,27 @@ function tagSheet(b, kind='bin', opts={}){
   // carries the bag link; the number is saved with the part once the tag is written or its link is handed out.
   const newBag = kind==='part' && !b.bag ? nextBag() : 0;
   if(newBag) b={...b, bag:newBag};
-  const claim=()=>newBag ? S.db.doc('parts/'+b.id).update({bag:newBag}).catch(()=>{}) : Promise.resolve();
   const url = kind==='part' ? partUrl(b) : binUrl(b);
   const label = kind==='part' ? (bagStr(b.bag)||b.name) : b.code;
   const native = NFC_OK && !FRAMED;
   const along = 'https://junkdrawer.works/tag-along/?url='+encodeURIComponent(url)+'&label='+encodeURIComponent(String(label).slice(0,12));
   const title = kind==='part' ? `Tag bag <span class="label lg">${esc(bagStr(b.bag)||b.name)}</span>` : `Tag <span class="label lg ${isBox(b)?'box':''}">${esc(b.code)}</span>`;
   const {el,close}=sheet(`<h3>${title}</h3>
-    ${kind==='part'&&b.bag?`<p class="muted">Write <b>${esc(bagStr(b.bag))}</b> on the bag too, so it can be found without a phone.</p>`:''}
+    ${kind==='part'&&b.bag?`<p class="muted">${newBag?`This will be bag <b>${esc(bagStr(b.bag))}</b>. The number is saved once the tag is written; write it on the bag then.`:`Write <b>${esc(bagStr(b.bag))}</b> on the bag too, so it can be found without a phone.`}</p>`:''}
     <div class="tagzone" id="tz"><div class="tz-icon">${ICONS.nfc}</div><div id="t-status">${native?'Stick a blank sticker on, then hold it to the <b>top edge of the phone</b>.':'This browser can’t write NFC tags. Use Tag Along, or open Parts Bin in Chrome on an Android phone.'}</div></div>
     <div class="row" style="margin-top:12px">${native?`<button class="btn primary" id="write">${ICONS.nfc} Write tag</button>`:`<a class="btn primary" href="${esc(along)}" target="_blank" rel="noopener" style="text-decoration:none">${ICONS.nfc} Write with Tag Along</a>`}<button class="btn" id="copy">Copy link</button></div>
-    <div class="actions"><button class="btn" id="done">${kind==='part'?'Skip the tag':'Close'}</button></div>`);
+    <div class="actions"><button class="btn" id="done">${newBag?'Cancel':kind==='part'?'Skip the tag':'Close'}</button></div>`);
   let ctl=null;
   const finish=()=>{ ctl?.abort(); close(); };
   el.querySelector('#done').onclick=finish;
-  el.querySelector('#copy').onclick=()=>{ claim(); navigator.clipboard?.writeText(url).then(()=>toast('Link copied'),()=>toast(url,4000)); };
+  // The number was free when the sheet opened. If another part has taken it since (another tab, a sync), stop here
+  // rather than put two bags on one number.
+  const taken=()=>{ if(!newBag || ![...S.parts.values()].some(x=>x.id!==b.id && Number(x.bag)===newBag)) return false; finish(); toast(`Bag ${bagStr(newBag)} has just been used. Tap Bag tag again for the next number.`,4000); return true; };
+  const claim=()=>{ if(taken()) return false; if(newBag) S.db.doc('parts/'+b.id).update({bag:newBag}).catch(()=>{}); return true; };
+  el.querySelector('#copy').onclick=()=>{ if(!claim()) return; navigator.clipboard?.writeText(url).then(()=>toast('Link copied'),()=>toast(url,4000)); };
   const st=el.querySelector('#t-status'), tz=el.querySelector('#tz');
   async function write(overwrite=false){
+    if(taken()) return;
     ctl?.abort(); ctl=new AbortController();
     tz.className='tagzone wait'; st.innerHTML='Hold the sticker to the <b>top edge of the phone</b>…';
     try{
@@ -491,7 +525,7 @@ function tagSheet(b, kind='bin', opts={}){
       tz.className='tagzone ok'; st.textContent=`${label} tag written.`;
       await S.db.doc((kind==='part'?'parts/':'bins/')+b.id).update(newBag?{tagWritten:true, bag:newBag}:{tagWritten:true}).catch(()=>{});
       el.querySelector('#done').textContent = kind==='part' ? 'Next bag' : 'Done';
-      setTimeout(()=>{ if(el.isConnected) close(); toast(`${label} tagged`); }, 900);
+      setTimeout(()=>{ if(el.isConnected) close(); if(newBag) toast(`${label} tagged. Write ${label} on the bag.`,3500); else toast(`${label} tagged`); }, 900);
     }catch(e){
       if(e.name==='AbortError') return;
       try{ navigator.vibrate?.([40,60,40]); }catch{}
@@ -504,7 +538,7 @@ function tagSheet(b, kind='bin', opts={}){
       else st.textContent='Couldn’t write it ('+(e.message||e.name)+'). Hold it flat and still, then tap Write tag.';
     }
   }
-  if(!native) el.querySelector('a.btn.primary').addEventListener('click', claim);
+  if(!native) el.querySelector('a.btn.primary').addEventListener('click', e=>{ if(!claim()) e.preventDefault(); });
   if(native){
     el.querySelector('#write').onclick=()=>write(false);
     // When NFC is already allowed, start listening straight away: no extra tap between saving and tagging.
@@ -573,6 +607,195 @@ async function readTag(){
   if(await listen(true)) toast(was?'Listening: hold any tag to the top of the phone':'Listening while Parts Bin is open: hold a tag to the top of the phone',3000);
 }
 
+// ------------------------------------------------------------------ specs and reference photos
+function specChips(p){
+  return [...(p.iface||[]).map(x=>`<span class="chip spec">${esc(x)}</span>`), p.addr?`<span class="chip spec mono">${esc(p.addr)}</span>`:'',
+    p.volts?`<span class="chip spec">${esc(p.volts)} supply</span>`:'', p.logic?`<span class="chip spec">${esc(p.logic)} logic</span>`:''].join('');
+}
+// A reference photo is a typical one from the maker's or a shop's site, loaded from there. It never replaces the
+// part icon in the page: if the picture is gone, the icon underneath shows again.
+function refImg(p){ return p.img ? `<img class="ref" src="${esc(p.img)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''; }
+function wireRefs(el){ el.querySelectorAll('img.ref').forEach(i=>{ i.onerror=()=>{ i.parentElement?.classList.remove('refphoto'); i.remove(); }; }); }
+function zoomRef(p){
+  const {el,close}=sheet(`<h3>${esc(p.name)}</h3><div class="refbig">${ICONS.parts}${refImg(p)}</div>
+    <p class="tiny" style="margin-top:8px">A typical one, for comparison. It isn’t a photo of yours, and it loads from ${esc(host(p.img))}.</p>
+    <div class="actions">${/^https?:\/\//i.test(p.link||'')?`<a class="btn left" href="${esc(p.link)}" target="_blank" rel="noopener" style="text-decoration:none">Product page</a>`:''}<button class="btn" id="done">Close</button></div>`);
+  el.querySelector('#done').onclick=close; wireRefs(el);
+}
+function host(u){ try{ return new URL(u).hostname.replace(/^www\./,''); }catch{ return ''; } }
+function shortUrl(u){ try{ const x=new URL(u), tail=x.pathname.replace(/\/$/,'').split('/').pop(); return x.hostname.replace(/^www\./,'')+(tail?'/…/'+tail.slice(-28):''); }catch{ return String(u).slice(0,40); } }
+function lacksDetails(p){ return !(p.iface||[]).length && !p.volts && !p.img && !p.link && !p.mpn; }
+
+// ------------------------------------------------------------------ inbox: batches from Claude
+// Claude reads a photo, a receipt or a product page and replies with a link. Opening it puts the parts here to check;
+// each one is saved (and its bag tagged) from its card. Suggested details for parts already listed arrive the same way.
+let INBOX = IN.loadInbox(), usedAgain = null;
+function inboxCount(){ return IN.count(INBOX); }
+function keepInbox(){ if(!IN.saveInbox(INBOX)) toast('This browser’s storage is full',4000); }
+function linkCode(){ const m=new RegExp('^#('+IN.PREFIX+'.{8,})$').exec(location.hash); return m && m[1]; }
+async function takeLink(){
+  const c=linkCode(); if(!c) return false;
+  history.replaceState(null,'',location.pathname+location.search+'#inbox'); // the code is long, and reloading shouldn't read it twice
+  await takeBatch(c); render(); return true;
+}
+async function takeBatch(text, {again=false}={}){
+  let b=null; try{ b=IN.cleanBatch(await IN.read(text)); }catch{}
+  if(!b){ toast('That isn’t a batch Parts Bin can read. Ask Claude for the link again, or load the file.',4500); return false; }
+  const r=IN.addBatch(INBOX,b,{again}); keepInbox(); usedAgain=null;
+  if(r==='used'){ usedAgain={text, name:b.name||'that batch'}; toast('You’ve been through that batch already',3000); }
+  else if(r==='open') toast('That batch is already waiting here');
+  else if(r==='full'){ toast('The inbox is full. Finish or dismiss a batch, then open the link again.',4500); return false; }
+  else toast(`${b.items.length} from Claude to check`);
+  return true;
+}
+const isUpdate = x => !!x.id && S.parts.has(x.id);
+// A suggestion that matches what the part already says isn't worth showing.
+function pruneInbox(){
+  if(!S.loaded) return; let changed=false;
+  for(const b of [...INBOX.batches]){
+    const done=b.items.filter(x=>isUpdate(x) && !IN.diff(S.parts.get(x.id),x).length).map(x=>x.k);
+    if(done.length){ IN.resolve(INBOX,b.id,done); changed=true; }
+  }
+  if(changed) keepInbox();
+}
+const SOURCES = {photo:'From a photo', receipt:'From a receipt', link:'From a link', list:'From a list', details:'Suggested details'};
+function renderInbox(m){
+  pruneInbox();
+  const n=inboxCount();
+  m.append(h(`<div class="topbar"><h2>Inbox</h2>${n?`<span class="tiny">${n} to check</span>`:''}</div>`));
+  if(!S.canWrite){ m.append(h('<div class="empty"><p>This view is read-only.</p></div>')); return; }
+  for(const b of INBOX.batches) m.append(batchSection(b));
+  if(usedAgain){ const u=usedAgain; const c=h(`<div class="note row" style="margin-bottom:14px"><span class="grow">You’ve already been through “${esc(u.name)}”.</span><button class="btn sm" id="again">Load it again</button></div>`); c.querySelector('#again').onclick=async()=>{ await takeBatch(u.text,{again:true}); render(); }; m.append(c); }
+  if(!n) m.append(h(`<div class="empty"><h3>Nothing waiting</h3><p>Parts Claude reads off a photo, a receipt or a product page land here to check before they’re saved.</p></div>`));
+  const intake=h(`<section class="card" style="margin-top:18px"><h3>Add parts from a photo, a receipt or a link</h3>
+    <p class="muted">Send Claude a photo of the bags, a receipt or order email, or a product link, and ask it to add them to Parts Bin. It replies with a link that opens here with each part filled in, ready to check, save and tag.</p>
+    <div class="field" style="margin-top:10px"><label for="inb-paste">Or paste the link or code</label><input id="inb-paste" class="mono" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(APP_URL)}#${IN.PREFIX}…"></div>
+    <div class="row"><button class="btn" id="inb-go">Open it</button><button class="btn" id="inb-file">Load a file</button></div></section>`);
+  const paste=intake.querySelector('#inb-paste');
+  const open=async()=>{ const t=paste.value.trim(); if(!t){ toast('Paste the link first'); return; } if(await takeBatch(t)) render(); };
+  intake.querySelector('#inb-go').onclick=open; paste.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); open(); } };
+  intake.querySelector('#inb-file').onclick=importJson;
+  m.append(intake);
+  const bare=[...S.parts.values()].filter(lacksDetails);
+  const det=h(`<section class="card"><h3>Fill in details</h3>
+    <p class="muted">Claude can suggest a category, interface, I2C address, voltages, a part number, a link and a reference photo for parts you already have, and flag the ones worth testing. Ask it to fill in details for your Parts Bin parts, or send it the list from here. The suggestions come back to this inbox, and nothing changes until you apply it.</p>
+    <div class="row">${bare.length?`<button class="btn" id="inb-share">Send Claude ${bare.length} part${bare.length===1?'':'s'} with no details</button>`:'<span class="tiny">Every part has some details already.</span>'}</div></section>`);
+  det.querySelector('#inb-share')?.addEventListener('click',()=>sendToClaude(bare));
+  m.append(det);
+  wireRefs(m);
+}
+function batchSection(b){
+  const ups=b.items.filter(isUpdate), news=b.items.filter(x=>!isUpdate(x)&&x.name);
+  const sec=h(`<section class="batch" data-batch="${esc(b.id)}"><div class="section-h"><h3>${esc(b.name||SOURCES[b.source])}</h3><span class="tiny">${b.name?esc(SOURCES[b.source])+' · ':''}${b.items.length} left</span></div>
+    <div class="row batchbar">${ups.length>1?`<button class="btn primary" data-a="all">Apply all ${ups.length}</button>`:''}<span class="grow"></span><button class="btn sm" data-a="drop">Dismiss the rest</button></div></section>`);
+  sec.querySelector('[data-a="all"]')?.addEventListener('click',()=>applyUpdates(b, ups.map(x=>({x,keys:null}))));
+  sec.querySelector('[data-a="drop"]').onclick=()=>{ if(!confirm(`Dismiss the ${b.items.length} left in this batch? Nothing already saved changes.`)) return; IN.resolve(INBOX,b.id,null); keepInbox(); render(); };
+  for(const x of news) sec.append(newCard(b,x));
+  for(const x of ups) sec.append(updateCard(b,x));
+  // Suggestions for parts this browser doesn't have. They stay until dismissed: the parts may be on another device
+  // that hasn't synced here yet.
+  const lost=b.items.filter(x=>!isUpdate(x)&&!x.name).length;
+  if(lost) sec.append(h(`<div class="note" style="margin-bottom:14px">${lost} suggestion${lost===1?' is':'s are'} for ${lost===1?'a part that isn’t':'parts that aren’t'} in this browser’s inventory. If another device has ${lost===1?'it':'them'}, sync here first and ${lost===1?'it':'they'}’ll show up; otherwise dismiss.</div>`));
+  return sec;
+}
+// Parts already listed that this could be: the one Claude named first, then near matches on the name or part number.
+function candidates(x){
+  const out=[]; const add=(p,why)=>{ if(p && !out.some(c=>c.p.id===p.id)) out.push({p,why}); };
+  add(x.match && S.parts.get(x.match),'match');
+  for(const p of nearParts(x.name)) add(p,'near');
+  if(x.mpn && x.mpn.length>2) for(const p of searchParts(x.mpn).slice(0,2)) add(p,'near');
+  return out.slice(0,3);
+}
+function nearParts(name){
+  // "HW-611" and "HW611" are one word; what's in brackets may be the chip (GY302 (BH1750)) or just the brand, so try both.
+  const toks=(s,brackets)=>norm(String(s||'').replace(/([a-z])-(?=\d)/gi,'$1').replace(/\([^)]*\)/g,m=>brackets?' '+m+' ':' ')).split(' ').filter(w=>w.length>1);
+  const score=(a,b)=>{ const al=a.join('').length, bl=b.join('').length; if(!al||!bl) return 0;
+    const shared=a.filter(w=>b.includes(w)), s=shared.join('').length/Math.min(al,bl);
+    const model=shared.some(w=>w.length>=6&&/\d/.test(w)&&/[a-z]/.test(w)); // a shared part number
+    return model ? Math.max(s,0.6) : (s>=0.6&&shared.some(w=>/\d/.test(w)))||s>=0.85 ? s : 0; };
+  return [...S.parts.values()].map(p=>({p, s:Math.max(score(toks(name,false),toks(p.name,false)), score(toks(name,true),toks(p.name,true)))}))
+    .filter(x=>x.s).sort((x,y)=>y.s-x.s).slice(0,2).map(x=>x.p);
+}
+function itemHead(x, title, sub=''){
+  return `<div class="inb-head"><div class="thumb${x.img?' refphoto':''}">${ICONS.parts}${refImg(x)}</div><div class="grow"><div class="t">${title}</div>
+    <div class="row chips">${x.category?`<span class="chip">${esc(x.category)}</span>`:''}${specChips(x)}${x.mpn?`<span class="tiny mono">${esc(x.mpn)}</span>`:''}</div>${sub}</div></div>`;
+}
+function newCard(b,x){
+  const cands=candidates(x);
+  const row=c=>`<button type="button" class="${c.why==='match'?'pick':''}" data-id="${esc(c.p.id)}"><span><b>${esc(c.p.name)}</b><div class="s">${c.p.bag?esc(bagStr(c.p.bag))+' · ':''}in stock ${esc(fmtQty(c.p))}${binOf(c.p)?' · '+esc(binOf(c.p).code):''}</div></span><span class="chip ${c.why==='match'?'ok':''}">${c.why==='match'?'same part':'existing'}</span></button>`;
+  const el=h(`<div class="card inb" data-k="${esc(x.k)}">
+    ${itemHead(x, `${esc(x.name)}${x.qty!=null?` <span class="mono q">×${esc(x.qty)}</span>`:''}`, x.notes?`<div class="tiny">${esc(x.notes)}</div>`:'')}
+    ${x.check?`<div class="checknote"><div><b>Check.</b> ${esc(x.check)}</div></div>`:''}
+    <div class="matchlist">${cands.map(row).join('')}
+      <button type="button" data-id=""><span><b>${cands.length?'It’s a different part':'Add it'}</b>${cands.length?'<div class="s">Not one of these</div>':''}</span><span class="chip warn">new part</span></button></div>
+    <div class="row"><span class="tiny grow">${cands.length?'Pick the row that’s in the bag.':'Opens filled in, to check and save.'}</span><button class="btn sm" data-a="skip">Skip</button></div></div>`);
+  el.querySelectorAll('[data-id]').forEach(btn=>btn.onclick=()=>openFromInbox(b,x,btn.dataset.id?S.parts.get(btn.dataset.id):null));
+  el.querySelector('[data-a="skip"]').onclick=()=>{ IN.resolve(INBOX,b.id,[x.k]); keepInbox(); render(); };
+  return el;
+}
+// Opens the usual part sheet, filled in. A part that's already listed keeps its record: blanks are filled, nothing it
+// says is overwritten, and a receipt adds to its count where a photo of the bag replaces it.
+function openFromInbox(b,x,matched){
+  const empty=v=>v==null||v===''||(Array.isArray(v)&&!v.length);
+  let base;
+  if(matched){
+    base={...matched};
+    for(const k of ['category','mpn','link','iface','addr','volts','logic','img']) if(!empty(x[k]) && empty(base[k])) base[k]=x[k];
+    if(x.check) base.check = !matched.check ? x.check : matched.check.includes(x.check) ? matched.check : (matched.check+' · '+x.check).slice(0,300);
+    if(x.notes) base.notes=IN.proposed(matched,x,'notes');
+    if(x.tags) base.tags=IN.proposed(matched,x,'tags');
+    if(x.qty!=null) base.qty = (x.add ?? b.source==='receipt') ? Number(matched.qty||0)+x.qty : x.qty;
+  } else {
+    base={name:x.name, category:x.category||'', mpn:x.mpn||'', qty:x.qty??1, unit:x.unit||'pcs', tags:x.tags||[], notes:x.notes||'', link:x.link||''};
+    for(const k of ['iface','addr','volts','logic','img','check']) if(!empty(x[k])) base[k]=x[k];
+    const bin=b.bin && [...S.bins.values()].find(z=>z.code.toLowerCase()===b.bin.toLowerCase()), dest=localGet('sr.packbox','');
+    if(bin) base.binId=bin.id; else if(S.bins.has(dest)) base.binId=dest;
+  }
+  editPart(base,{tag:!matched||!matched.bag, afterSave:()=>{ IN.resolve(INBOX,b.id,[x.k]); keepInbox(); render(); }});
+}
+function updateCard(b,x){
+  const p=S.parts.get(x.id), d=IN.diff(p,x), bin=binOf(p);
+  const to=r=>{
+    if(r.k==='notes' && r.from) return '+ '+esc(x.notes);
+    if(r.k==='tags'){ const add=x.tags.filter(t=>!(p.tags||[]).includes(t)); return '+ '+esc(add.join(', ')); }
+    if(r.k==='img'||r.k==='link') return `${r.from?'<s>'+esc(shortUrl(r.from))+'</s> ':''}${esc(shortUrl(r.to))}`;
+    return `${IN.show(r.from)?'<s>'+esc(IN.show(r.from))+'</s> ':''}${esc(IN.show(r.to))}`;
+  };
+  const el=h(`<div class="card inb" data-k="${esc(x.k)}">
+    ${itemHead({img:x.img||p.img}, `<a href="#part/${esc(p.id)}">${esc(p.name)}</a>`, `<div class="tiny">${p.bag?esc(bagStr(p.bag))+' · ':''}${bin?esc(bin.code):'no bin'}</div>`)}
+    <div class="diff">${d.map(r=>`<label><input type="checkbox" data-k="${r.k}" checked><span class="k">${esc(r.label)}</span><span class="v${r.k==='check'?' warn':''}">${to(r)}</span></label>`).join('')}</div>
+    <div class="row"><span class="grow"></span><button class="btn sm" data-a="skip">Skip</button><button class="btn primary sm" data-a="apply">Apply</button></div></div>`);
+  el.querySelector('[data-a="skip"]').onclick=()=>{ IN.resolve(INBOX,b.id,[x.k]); keepInbox(); render(); };
+  el.querySelector('[data-a="apply"]').onclick=()=>applyUpdates(b,[{x, keys:new Set([...el.querySelectorAll('.diff input:checked')].map(i=>i.dataset.k))}]);
+  return el;
+}
+// keys: which fields to take from a suggestion; null takes them all. Two suggestions for one part build on each
+// other, and each part is written once.
+function applyUpdates(b, list){
+  const now=new Map(), changes=new Map();
+  for(const {x,keys} of list){
+    const p=now.get(x.id)||S.parts.get(x.id); if(!p) continue;
+    const data={}; for(const r of IN.diff(p,x)) if(!keys||keys.has(r.k)) data[r.k]=r.to;
+    if(!Object.keys(data).length) continue;
+    now.set(x.id,{...p,...data}); changes.set(x.id,{...changes.get(x.id),...data});
+  }
+  const writes=[...changes].map(([pid,data])=>S.db.doc('parts/'+pid).update(data)), parts=writes.length;
+  IN.resolve(INBOX,b.id,list.map(q=>q.x.k)); keepInbox();
+  Promise.all(writes).then(()=>toast(parts?`Updated ${parts} part${parts===1?'':'s'}`:'Nothing applied'), writeFail);
+  render();
+}
+// Hands Claude the parts to look up. On a phone this opens the share sheet (pick Claude); elsewhere it copies.
+function claudeText(parts){
+  const rows=parts.map(p=>{ const r={id:p.id, name:p.name}; for(const k of ['category','mpn','addr','volts','logic','link']) if(p[k]) r[k]=p[k]; if((p.iface||[]).length) r.iface=p.iface; if(p.notes) r.notes=String(p.notes).slice(0,140); return r; });
+  return `Parts Bin: fill in details for ${rows.length===1?'this part':`these ${rows.length} parts`} (category, interface, I2C address, supply and logic voltage, part number, link, reference photo), flag anything I should test before trusting it, and give me the Inbox link.\n\n${JSON.stringify({partsbin:1, ask:'details', parts:rows})}`;
+}
+async function sendToClaude(parts){
+  const text=claudeText(parts);
+  if(navigator.share && matchMedia('(pointer:coarse)').matches){ try{ await navigator.share({text}); return; }catch(e){ if(e.name==='AbortError') return; } }
+  try{ await navigator.clipboard.writeText(text); toast('Copied. Paste it into a chat with Claude.',3500); }
+  catch{ const {el,close}=sheet(`<h3>Copy this to Claude</h3><textarea readonly style="min-height:180px" class="mono">${esc(text)}</textarea><div class="actions"><button class="btn" id="done">Close</button></div>`); el.querySelector('#done').onclick=close; el.querySelector('textarea').select(); }
+}
+
 // ------------------------------------------------------------------ settings
 function renderSettings(m){
   m.append(h('<div class="topbar"><h2>Settings</h2></div>'));
@@ -602,13 +825,15 @@ function exportJson(){
 function importJson(){
   const inp=document.createElement('input'); inp.type='file'; inp.accept='application/json,.json';
   inp.onchange=async()=>{ const f=inp.files[0]; if(!f) return;
-    try{ const n=store.importText(await f.text()); toast(n?`Loaded: ${n} item${n===1?'':'s'} added or updated`:'Nothing new in that file',3000); go('bins'); }
+    const text=await f.text();
+    if(/^\s*\{\s*"partsbin"/.test(text)){ if(await takeBatch(text)){ if(S.route.view==='inbox') render(); else go('inbox'); } return; }
+    try{ const n=store.importText(text); toast(n?`Loaded: ${n} item${n===1?'':'s'} added or updated`:'Nothing new in that file',3000); go('bins'); }
     catch(e){ toast(e.message||'Couldn’t read that file',4000); } };
   inp.click();
 }
 
 // ------------------------------------------------------------------ boot
-window.addEventListener('hashchange',render);
+window.addEventListener('hashchange',()=>{ if(linkCode()) takeLink(); else render(); });
 S.db=localDb; S.user=null; S.canWrite=true;
 S.sample=makeSample(); S.imgOk=!!S.sample; S.assets=null; S.downloads=null;
 let got=0;
@@ -619,7 +844,8 @@ render();
 store.onSave(r=>{ if(r==='full') toast('This browser’s storage is full',4000); else drive.changed(); });
 drive.onUpdate(()=>store.reload());
 drive.chip(document.getElementById('cloud')); drive.chip(document.getElementById('cloud-m'));
-window.addEventListener('storage',e=>{ if(e.key==='parts-bin') store.reload(); });
+window.addEventListener('storage',e=>{ if(e.key==='parts-bin') store.reload(); if(e.key===IN.KEY){ INBOX=IN.loadInbox(); render(); } });
+takeLink(); // a link from Claude carries a batch for the inbox
 listen(); // starts on its own once NFC has been allowed for the site
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') listen(); });
 if('serviceWorker' in navigator && !FRAMED && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});

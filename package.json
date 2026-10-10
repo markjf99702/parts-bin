@@ -3,5 +3,5 @@
   "private": true,
   "type": "module",
   "description": "Every part, which bag it's in, and what you can build with it.",
-  "scripts": { "test": "node --test test/model.test.mjs && node test/e2e.mjs" }
+  "scripts": { "test": "node --test test/model.test.mjs test/inbox.test.mjs && node test/e2e.mjs" }
 }

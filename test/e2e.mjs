@@ -44,6 +44,9 @@ const fakeNfc = () => {
   window.__read = url => window.__reader?.onreading?.({ message: { records: [{ recordType: 'url', data: new TextEncoder().encode(url) }] } });
   navigator.permissions.query = async () => ({ state: 'granted' });
   navigator.vibrate = () => true;
+  // sharing with Claude: the phone's share sheet, or the clipboard anywhere else
+  navigator.share = async d => { window.__shared = d.text; };
+  if (navigator.clipboard) navigator.clipboard.writeText = async t => { window.__shared = t; };
 };
 
 const g = fakeGoogle();
@@ -52,11 +55,13 @@ async function device() {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, acceptDownloads: true });
   await g.install(ctx, { rewrite: { '**/js/sync.js': s => s.replace("['https://junkdrawer.works']", `['https://junkdrawer.works', '${origin}']`) } });
   await ctx.addInitScript(fakeNfc);
+  // reference photos load from wherever they're hosted; here, one that exists and one that's gone
+  await ctx.route('https://img.test/**', async r => (r.request().url().includes('missing') ? r.fulfill({ status: 404, body: '' }) : r.fulfill({ contentType: 'image/png', body: await readFile(join(root, 'icon-192.png')) })));
   const page = await ctx.newPage();
   page.problems = [];
   page.on('pageerror', e => page.problems.push(e.message));
-  page.on('console', m => { if (m.type() === 'error') page.problems.push(m.text()); });
-  page.on('request', r => { const u = r.url(); if (!u.startsWith(base) && !u.startsWith('https://www.googleapis.com/') && !u.startsWith('https://accounts.google.com/')) page.problems.push('left the site: ' + u); });
+  page.on('console', m => { if (m.type() === 'error' && !m.location().url.startsWith('https://img.test/')) page.problems.push(m.text()); });
+  page.on('request', r => { const u = r.url(); if (!u.startsWith(base) && !u.startsWith('https://www.googleapis.com/') && !u.startsWith('https://accounts.google.com/') && !u.startsWith('https://img.test/')) page.problems.push('left the site: ' + u); });
   await page.goto(base);
   return { ctx, page };
 }
@@ -130,7 +135,9 @@ const spare = () => page.evaluate(id => JSON.parse(localStorage.getItem('parts-b
 await page.goto(base + '#part/' + spareId);
 await page.click('text=Bag tag');
 assert.match(await page.textContent('.sheet h3'), /#004/);
+assert.match(await page.textContent('.sheet'), /This will be bag #004/);
 // looking at the sheet and backing out takes no number
+assert.equal(await page.textContent('.sheet #done'), 'Cancel');
 await page.click('.sheet #done');
 assert.ok(!(await spare()).bag);
 await page.click('text=Bag tag');
@@ -141,6 +148,23 @@ await page.waitForFunction(() => !document.querySelector('.sheet'));
 assert.equal((await page.evaluate(() => window.__written)).at(-1), base + '#bag/004');
 assert.equal((await spare()).bag, 4); assert.equal((await spare()).tagWritten, true);
 assert.equal(await page.textContent('.binhead .bagno'), '#004');
+// if the number is taken while the sheet is open (another tab, a sync), it stops rather than double up
+await page.goto(base + '#parts'); await page.click('#addp'); await page.fill('#p-name', 'Second spare'); await page.uncheck('#p-dotag'); await page.fill('#p-bag', ''); await page.click('.sheet #save');
+await page.waitForFunction(() => !document.querySelector('.sheet'));
+const second = await page.evaluate(() => Object.entries(JSON.parse(localStorage.getItem('parts-bin')).items.parts).find(([, x]) => x.name === 'Second spare')[0]);
+await page.goto(base + '#part/' + second); await page.click('text=Bag tag');
+assert.match(await page.textContent('.sheet h3'), /#005/);
+await page.evaluate(id => { const d = JSON.parse(localStorage.getItem('parts-bin')); d.items.parts.stolen = { name: 'Took the number', bag: 5, qty: 1, t: Date.now() }; localStorage.setItem('parts-bin', JSON.stringify(d)); dispatchEvent(new StorageEvent('storage', { key: 'parts-bin' })); }, second);
+await page.waitForFunction(() => JSON.parse(localStorage.getItem('parts-bin')).items.parts.stolen);
+await page.waitForTimeout(100);
+await page.click('.sheet #write');
+await page.waitForSelector('text=has just been used');
+assert.ok(!(await page.evaluate(id => JSON.parse(localStorage.getItem('parts-bin')).items.parts[id].bag, second)));
+assert.equal(await page.evaluate(() => window.__tap()), false, 'nothing was waiting to be written');
+// put things back so the bag numbers below read on from #004
+await page.evaluate(id => { const d = JSON.parse(localStorage.getItem('parts-bin')); delete d.items.parts.stolen; delete d.items.parts[id]; localStorage.setItem('parts-bin', JSON.stringify(d)); dispatchEvent(new StorageEvent('storage', { key: 'parts-bin' })); }, second);
+await page.waitForTimeout(100);
+await page.goto(base + '#part/' + spareId);
 // tagging it again keeps its number
 await page.click('text=Bag tag');
 await page.click('.sheet #write');
@@ -186,6 +210,131 @@ const summary = await page.textContent('.bom-summary');
 assert.match(summary, /2 have/); assert.match(summary, /1 missing/);
 await page.screenshot({ path: join(root, 'docs/phone-bom.png') });
 
+// ---- Inbox: a link from Claude brings parts to check; each is saved and tagged from its card
+const IN = await import('../js/inbox.js');
+const part = id => page.evaluate(id => JSON.parse(localStorage.getItem('parts-bin')).items.parts[id], id);
+const partNamed = name => page.evaluate(name => Object.entries(JSON.parse(localStorage.getItem('parts-bin')).items.parts).map(([id, x]) => ({ id, ...x })).find(x => x.name === name), name);
+const tapTag = async () => { await page.waitForSelector('#tz.wait'); await page.evaluate(() => window.__tap()); await page.waitForFunction(() => !document.querySelector('.sheet')); };
+const photoLink = base + '#' + await IN.encode({ partsbin: 1, batch: { id: 'ptest-photo', name: 'Bench photo', source: 'photo', bin: 'ENV', items: [
+  { name: 'SCD41 CO2 sensor', qty: 3, match: 'p-scd41', mpn: 'SCD41', iface: ['I2C'], addr: '0x62', volts: '2.4–5.5 V', logic: '3.3 V', img: 'https://img.test/scd41.png', check: 'Bench Identifier Port A should name it SCD41 at 0x62.' },
+  { name: 'TCA9548A I2C multiplexer', qty: 2, category: 'Sensors', iface: 'iic', addr: '0x70–0x77', img: 'https://img.test/missing.png', onclick: 'alert(1)' },
+  { name: 'Unmarked purple board', check: 'No markings to read. Bench Identifier Port A will name it if it’s I2C.' },
+] } });
+await page.goto(photoLink);
+await page.waitForSelector('.batch .card.inb');
+assert.equal(await page.evaluate(() => location.hash), '#inbox', 'the long code is gone from the address');
+assert.equal(await page.locator('.card.inb').count(), 3);
+assert.equal(await page.textContent('#tabbar .badge'), '3');
+await page.waitForFunction(() => document.querySelector('.card.inb[data-k="i0"] img.ref')?.naturalWidth > 0);
+await page.screenshot({ path: join(root, 'docs/phone-inbox.png') });
+// the part Claude matched is offered first; picking it opens that record with its blanks filled, ready to tag
+await page.click('.card.inb[data-k="i0"] button.pick');
+await page.waitForSelector('.sheet #p-name');
+assert.equal(await page.inputValue('#p-name'), 'SCD41');
+assert.equal(await page.inputValue('#p-iface'), 'I2C'); assert.equal(await page.inputValue('#p-addr'), '0x62'); assert.equal(await page.inputValue('#p-qty'), '3');
+assert.equal(await page.textContent('.sheet #save'), 'Save & tag');
+await page.click('.sheet #save'); await tapTag();
+assert.equal((await page.evaluate(() => window.__written)).at(-1), base + '#bag/005');
+let scd = await part('p-scd41');
+assert.equal(scd.bag, 5); assert.equal(scd.tagWritten, true); assert.deepEqual(scd.iface, ['I2C']); assert.equal(scd.img, 'https://img.test/scd41.png'); assert.match(scd.check, /Bench Identifier/); assert.deepEqual(scd.tags, ['generic']);
+assert.equal(await page.locator('.card.inb').count(), 2);
+// a new part opens filled in, in the bin the batch named
+await page.click('.card.inb[data-k="i1"] [data-id=""]');
+await page.waitForSelector('.sheet #p-name');
+assert.equal(await page.inputValue('#p-name'), 'TCA9548A I2C multiplexer'); assert.equal(await page.inputValue('#p-bin'), 'bin-env'); assert.equal(await page.inputValue('#p-qty'), '2'); assert.equal(await page.inputValue('#p-iface'), 'I2C');
+await page.click('.sheet #save'); await tapTag();
+assert.equal((await page.evaluate(() => window.__written)).at(-1), base + '#bag/006');
+const tca = await partNamed('TCA9548A I2C multiplexer');
+assert.equal(tca.bag, 6); assert.equal(tca.binId, 'bin-env'); assert.equal(tca.addr, '0x70–0x77'); assert.equal(tca.onclick, undefined);
+// skipping takes a card out and saves nothing
+await page.click('.card.inb[data-k="i2"] [data-a="skip"]');
+await page.waitForSelector('text=Nothing waiting');
+assert.equal(await page.locator('#tabbar .badge').count(), 0);
+assert.equal(await partNamed('Unmarked purple board'), undefined);
+// the same link again, on a fresh load, doesn't bring the batch back unless asked
+await page.goto('about:blank'); await page.goto(photoLink);
+await page.waitForSelector('#again');
+assert.equal(await page.locator('.card.inb').count(), 0);
+await page.click('#again'); await page.waitForSelector('.card.inb');
+assert.equal(await page.locator('.card.inb').count(), 3);
+assert.ok(await page.$(`.card.inb[data-k="i1"] [data-id="${tca.id}"]`), 'the part added a moment ago is offered as an existing one');
+page.once('dialog', d => d.accept());
+await page.click('[data-a="drop"]'); await page.waitForSelector('text=Nothing waiting');
+
+// ---- suggested details for parts already here: pasted in, one field unticked, applied
+await page.fill('#inb-paste', await IN.encode({ partsbin: 1, batch: { id: 'ptest-details', name: 'Details', source: 'details', items: [
+  { id: 'p-bme280', category: 'Sensors', mpn: 'BME280', iface: ['I2C', 'SPI'], addr: '0x77, 0x76', volts: '3–5 V', notes: 'Bosch', tags: ['qwiic'] },
+  { id: 'p-scd41', iface: ['I2C'], addr: '0x62' },
+  { id: 'p-not-here', volts: '5 V' },
+] } }));
+await page.click('#inb-go');
+await page.waitForSelector('.diff');
+assert.equal(await page.locator('.card.inb').count(), 1, 'a part that already says it all isn’t shown');
+assert.deepEqual(await page.locator('.diff .k').allTextContents(), ['Part number', 'Interface', 'I2C address', 'Supply', 'Tags', 'Notes']);
+await page.uncheck('.diff input[data-k="notes"]');
+await page.click('[data-a="apply"]');
+// a suggestion for a part this browser doesn't have is kept and explained, until it's dismissed
+await page.waitForSelector('text=isn’t in this browser’s inventory');
+assert.equal(await page.locator('.card.inb').count(), 0); assert.equal(await page.textContent('#tabbar .badge'), '1');
+page.once('dialog', d => d.accept());
+await page.click('[data-a="drop"]'); await page.waitForSelector('text=Nothing waiting');
+let bme2 = await part('p-bme280');
+assert.equal(bme2.mpn, 'BME280'); assert.deepEqual(bme2.iface, ['I2C', 'SPI']); assert.equal(bme2.addr, '0x77, 0x76'); assert.equal(bme2.volts, '3–5 V'); assert.deepEqual(bme2.tags, ['qwiic']);
+assert.ok(!bme2.notes, 'the unticked field was left alone'); assert.equal(bme2.qty, 4); assert.equal(bme2.bag, 1);
+// a batch as a file, loaded from Settings, and everything in it applied at once
+const moreFile = join(tmp, 'more.partsbin.json');
+await writeFile(moreFile, JSON.stringify({ partsbin: 1, batch: { id: 'ptest-more', source: 'details', items: [
+  { id: 'p-bme280', logic: '3.3 V or 5 V', check: 'Could be a BMP280. Bench Identifier Port A: ID 0x60 is a BME280.' },
+  { id: 'p-scd41', link: 'https://sensirion.com/products/catalog/SCD41', notes: 'Photoacoustic' },
+  { id: 'p-scd41', notes: 'Single-shot mode', tags: ['co2'] },
+] } }));
+await page.goto(base + '#settings');
+const [chooser2] = await Promise.all([page.waitForEvent('filechooser'), page.click('#imp')]);
+await chooser2.setFiles(moreFile);
+await page.waitForSelector('[data-a="all"]');
+assert.equal(await page.evaluate(() => location.hash), '#inbox');
+await page.click('[data-a="all"]'); await page.waitForSelector('text=Nothing waiting');
+bme2 = await part('p-bme280'); scd = await part('p-scd41');
+assert.equal(bme2.logic, '3.3 V or 5 V'); assert.match(bme2.check, /BMP280/); assert.equal(scd.link, 'https://sensirion.com/products/catalog/SCD41');
+assert.equal(scd.notes, 'Photoacoustic · Single-shot mode', 'two suggestions for one part build on each other'); assert.deepEqual(scd.tags, ['generic', 'co2']);
+
+// ---- the part page shows the specs and a reference photo, and keeps what's still to check in view
+await page.goto(base + '#part/p-scd41');
+await page.waitForFunction(() => document.querySelector('.binhead .refphoto img.ref')?.naturalWidth > 0);
+assert.deepEqual(await page.locator('.binhead .chip.spec').allTextContents(), ['I2C', '0x62', '2.4–5.5 V supply', '3.3 V logic']);
+await page.click('.binhead .refphoto'); await page.waitForSelector('.sheet .refbig img'); await page.click('.sheet #done');
+await page.click('#checked'); await page.waitForFunction(() => !document.querySelector('.checknote'));
+assert.ok(!(await part('p-scd41')).check);
+await page.goto(base + '#part/' + tca.id); // its photo is gone from the site it was on: the icon stays
+await page.waitForFunction(() => !document.querySelector('.binhead img.ref') && !document.querySelector('.binhead .refphoto') && document.querySelector('.binhead .photo svg'));
+await page.goto(base + '#parts'); await page.selectOption('#cat', '__check');
+assert.deepEqual(await page.locator('.item .t').allTextContents(), ['BME280 (Adafruit)']);
+await page.selectOption('#cat', '');
+await page.fill('#q', '0x62'); await page.waitForFunction(() => document.querySelectorAll('.item').length === 1);
+assert.equal(await page.textContent('.item .t'), 'SCD41'); await page.fill('#q', ''); await page.waitForFunction(() => document.querySelectorAll('.item').length > 1);
+
+// ---- a receipt adds to what's in stock, and a part that's already bagged isn't tagged again
+await page.goto(base + '#' + await IN.encode({ partsbin: 1, batch: { id: 'ptest-receipt', name: 'Order 1234', source: 'receipt', items: [{ name: 'TCA9548A I2C multiplexer', qty: 3, match: tca.id }, { name: 'Mystery <b>board</b><img src=x onerror=window.__xss=1>', notes: '<i>hi</i>' }] } }));
+await page.waitForSelector('.card.inb[data-k="i1"]');
+assert.equal(await page.locator('.card.inb .t b, .card.inb i, .card.inb img:not(.ref)').count(), 0, 'what a batch says is shown as text, never as markup');
+assert.equal(await page.evaluate(() => window.__xss), undefined);
+await page.click('.card.inb[data-k="i1"] [data-a="skip"]');
+await page.click('.card.inb button.pick');
+await page.waitForSelector('.sheet #p-name');
+assert.equal(await page.inputValue('#p-qty'), '5'); assert.equal(await page.textContent('.sheet #save'), 'Save');
+const wrote = (await page.evaluate(() => window.__written)).length;
+await page.click('.sheet #save'); await page.waitForSelector('text=Nothing waiting');
+assert.equal((await part(tca.id)).qty, 5); assert.equal((await page.evaluate(() => window.__written)).length, wrote);
+
+// ---- asking Claude for details hands over the part, with its id so the answer finds its way back
+const iron = await partNamed('Soldering iron');
+await page.goto(base + '#part/' + iron.id);
+await page.click('#ask');
+const shared = await page.evaluate(() => window.__shared);
+assert.match(shared, /^Parts Bin: fill in details for this part/);
+assert.deepEqual(JSON.parse(shared.slice(shared.indexOf('{'))).parts.map(x => x.id), [iron.id]);
+await page.goto(base + '#part/p-scd41'); assert.equal(await page.locator('#ask').count(), 0, 'a part with details doesn’t ask');
+
 // ---- Drive: turn it on here, then a laptop picks the inventory up
 await page.goto(base + '#settings');
 await page.click('[data-a="on"]');
@@ -222,6 +371,7 @@ assert.ok(await clear('#edit'), 'the Drive button covers Edit on a part page');
 await page.goto(base + '#bin/bin-env');
 await page.waitForSelector('#add');
 assert.ok(await clear('#add'), 'the Drive button covers a button on a bin page');
+for (const hash of ['#scan', '#inbox', '#parts', '#part/p-scd41']) { await page.goto(base + hash); await page.waitForTimeout(150); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, hash + ' scrolls sideways on a phone'); }
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 
