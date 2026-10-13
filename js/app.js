@@ -3,6 +3,7 @@ import { db as localDb, store } from './store.js';
 import { drive } from './sync.js';
 import { ai, makeSample, DEFAULT_MODEL } from './ai.js';
 import * as IN from './inbox.js';
+import { norm, parseBom, matchPart } from './bom.js';
 // ------------------------------------------------------------------ state
 const S = {
   db: null, user: null, sample: null, assets: null, downloads: null,
@@ -32,7 +33,6 @@ function parseHash(){ const h=location.hash.replace(/^#\/?/,''); const [view,...
 function go(view,arg){ location.hash = arg ? `#${view}/${arg}` : `#${view}`; }
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function id(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); }
-function norm(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9.+]+/g,' ').trim(); }
 function toast(msg,ms=1800){ const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(t._t); t._t=setTimeout(()=>t.hidden=true,ms); }
 function h(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild; }
 function fmtQty(p){ return (p.qty ?? 0) + (p.unit && p.unit!=='pcs' ? ' '+p.unit : ''); }
@@ -236,26 +236,7 @@ function renderPartPage(m, pid){
   wireRefs(m);
 }
 
-// ---- BOM check
-function parseBom(text){
-  return text.split(/\n|;/).map(l=>l.trim()).filter(l=>l && !l.startsWith('#')).map(l=>{
-    let qty=1, name=l;
-    let mm = l.match(/^(\d+(?:\.\d+)?)\s*[x×*]?\s+(.+)$/i) || l.match(/^(.+?)\s*[x×*]\s*(\d+(?:\.\d+)?)$/i) || l.match(/^(.+?)\s*[,\t]\s*(\d+(?:\.\d+)?)$/);
-    if(mm){ if(/^\d/.test(mm[1])){ qty=Number(mm[1]); name=mm[2]; } else { qty=Number(mm[2]); name=mm[1]; } }
-    return {qty, name:name.replace(/^[-•*]\s*/,'').trim()};
-  });
-}
-function matchPart(name){
-  const t=norm(name).split(' ').filter(w=>w.length>1); if(!t.length) return null;
-  let best=null, bs=0;
-  for(const p of S.parts.values()){
-    const hay=norm([p.name,p.mpn,(p.tags||[]).join(' ')].join(' '));
-    let s=0; for(const w of t){ if(hay.includes(w)) s+=w.length; }
-    const cov=s/t.join('').length;
-    if(cov>bs && cov>=0.5){ bs=cov; best=p; }
-  }
-  return best ? {p:best, conf:bs} : null;
-}
+// ---- BOM check (reading the list and matching it: bom.js)
 function renderBom(m){
   m.append(h('<div class="topbar"><h2>BOM check</h2></div>'));
   const saved=[...S.projects.values()].sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
@@ -270,7 +251,7 @@ function renderBom(m){
   ui.querySelector('#proj').onchange=e=>{ const p=S.projects.get(e.target.value); if(p){ ta.value=p.text; localSet('sr.bom',p.text); run(); } };
   function run(rows){
     localSet('sr.bom',ta.value);
-    const items=rows||parseBom(ta.value).map(r=>({...r, m:matchPart(r.name)}));
+    const items=rows||parseBom(ta.value).map(r=>({...r, m:matchPart(r.name,S.parts.values())}));
     if(!items.length){ out.innerHTML='<div class="empty"><p>Paste a parts list first.</p></div>'; return; }
     let have=0, short=0, missing=0;
     const trs=items.map(r=>{
@@ -294,7 +275,7 @@ function renderBom(m){
 INVENTORY (JSON): ${JSON.stringify(inv)}
 BOM lines (JSON): ${JSON.stringify(rows)}
 Reply with only a JSON array, same order and length as the BOM lines: [{"id": "<inventory id or null>", "confidence": 0-1}]`, {modelTier:'quick'});
-      const items=rows.map((r,i)=>{ const hit=Array.isArray(res)&&res[i]&&res[i].id&&S.parts.get(res[i].id); return {...r, m: hit?{p:hit, conf:Number(res[i].confidence||0.7)}:matchPart(r.name)}; });
+      const items=rows.map((r,i)=>{ const hit=Array.isArray(res)&&res[i]&&res[i].id&&S.parts.get(res[i].id); return {...r, m: hit?{p:hit, conf:Number(res[i].confidence||0.7)}:matchPart(r.name,S.parts.values())}; });
       run(items);
     }catch(e){ if(e.code!=='not_granted') toast('Smart matching unavailable, used plain matching'); run(); }
   });

@@ -51,6 +51,7 @@ GitHub Pages serves it from `main`, `/ (root)`.
 - `js/app.js`: the screens (bins, parts, BOM check, pack, settings) and the NFC tag writer and reader.
 - `js/model.js`: the inventory document and the item-by-item merge; unit-tested in `test/model.test.mjs`.
 - `js/store.js`: keeps it in localStorage and imports Stockroom exports and backups.
+- `js/bom.js`: BOM check's reading of a parts list and matching each line against the inventory; unit-tested in `test/bom.test.mjs`.
 - `js/inbox.js`: reads a batch from a link, a pasted code or a file, keeps only the fields it knows, and works out what a suggestion would change; unit-tested in `test/inbox.test.mjs`.
 - `skill/parts-bin-cataloger/SKILL.md`: the Claude skill that turns photos, receipts and links into a batch. The script that builds the link is at the end of it, and the tests check that its links open here.
 - `js/sync.js`: optional Google Drive saving, the junkdrawer.works way.
