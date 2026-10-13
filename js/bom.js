@@ -36,3 +36,7 @@ export function matchPart(name, parts) {
   }
   return best ? { p: best, conf: bs } : null;
 }
+
+// How many more a line needs than there are, to the thousandth: 0.3 m wanted with 0.1 m in stock is short 0.2 (plain
+// subtraction says 0.19999999999999998).
+export const shortBy = (need, have) => Math.round((need - have) * 1000) / 1000;

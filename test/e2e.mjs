@@ -229,6 +229,12 @@ await page.click('#save');
 await page.waitForFunction(() => Object.values(JSON.parse(localStorage.getItem('parts-bin')).items.projects).some(p => p.name === 'Lamp'));
 await page.waitForTimeout(100);
 assert.equal(await page.inputValue('#bom'), '3 WS2812 strip segment');
+// a shortfall in metres reads 0.2, not 0.19999999999999998, on screen and in the shopping list
+await page.evaluate(() => { const d = JSON.parse(localStorage.getItem('parts-bin')); d.items.parts['p-heat'] = { name: 'Heat shrink tubing 3mm', qty: 0.1, unit: 'm', tags: [], t: Date.now() }; localStorage.setItem('parts-bin', JSON.stringify(d)); dispatchEvent(new StorageEvent('storage', { key: 'parts-bin' })); });
+await page.fill('#bom', '0.3 m heat shrink tubing 3mm'); await page.click('#check');
+assert.equal(await page.textContent('.bom-table .chip.warn'), 'short 0.2');
+await page.click('#out #copy');
+await page.waitForFunction(() => window.__shared === '0.2 × m heat shrink tubing 3mm');
 
 // ---- Inbox: a link from Claude brings parts to check; each is saved and tagged from its card
 const IN = await import('../js/inbox.js');

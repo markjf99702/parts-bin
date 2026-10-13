@@ -3,7 +3,7 @@ import { db as localDb, store } from './store.js';
 import { drive } from './sync.js';
 import { ai, makeSample, DEFAULT_MODEL } from './ai.js';
 import * as IN from './inbox.js';
-import { norm, parseBom, matchPart } from './bom.js';
+import { norm, parseBom, matchPart, shortBy } from './bom.js';
 // ------------------------------------------------------------------ state
 const S = {
   db: null, user: null, sample: null, assets: null, downloads: null,
@@ -264,12 +264,12 @@ function renderBom(m){
       let st, cls, where='';
       if(!r.m){ st='missing'; cls='bad'; missing++; }
       else { const b=binOf(r.m.p); where=b?`<span class="label">${esc(b.code)}</span> ${esc(b.name||'')}`:'<span class="tiny">no bin</span>';
-        if(Number(r.m.p.qty||0)>=r.qty){ st='have'; cls='ok'; have++; } else { st=`short ${r.qty-Number(r.m.p.qty||0)}`; cls='warn'; short++; } }
+        if(Number(r.m.p.qty||0)>=r.qty){ st='have'; cls='ok'; have++; } else { st=`short ${shortBy(r.qty,Number(r.m.p.qty||0))}`; cls='warn'; short++; } }
       return `<tr><td class="n">${r.qty}</td><td>${esc(r.name)}${r.m?`<div class="tiny">→ ${esc(r.m.p.name)}${r.m.conf<0.8?' <span class="chip">fuzzy</span>':''}</div>`:''}</td><td class="n">${r.m?esc(fmtQty(r.m.p)):'—'}</td><td>${where}</td><td><span class="chip ${cls}">${st}</span></td></tr>`;
     }).join('');
     out.innerHTML=`<div class="bom-summary"><span class="chip ok">${have} have</span><span class="chip warn">${short} short</span><span class="chip bad">${missing} missing</span></div><div class="tablewrap"><table class="bom-table"><thead><tr><th>Need</th><th>Item</th><th>Stock</th><th>Where</th><th>Status</th></tr></thead><tbody>${trs}</tbody></table></div>
       ${missing+short?`<div class="row" style="margin-top:10px"><button class="btn sm" id="copy">Copy shopping list</button></div>`:''}`;
-    out.querySelector('#copy')?.addEventListener('click',()=>{ const txt=items.filter(r=>!r.m||Number(r.m.p.qty||0)<r.qty).map(r=>`${r.m?r.qty-Number(r.m.p.qty||0):r.qty} × ${r.name}`).join('\n'); navigator.clipboard?.writeText(txt).then(()=>toast('Shopping list copied')); });
+    out.querySelector('#copy')?.addEventListener('click',()=>{ const txt=items.filter(r=>!r.m||Number(r.m.p.qty||0)<r.qty).map(r=>`${r.m?shortBy(r.qty,Number(r.m.p.qty||0)):r.qty} × ${r.name}`).join('\n'); navigator.clipboard?.writeText(txt).then(()=>toast('Shopping list copied')); });
   }
   ui.querySelector('#check').onclick=()=>run();
   ui.querySelector('#smart')?.addEventListener('click', async()=>{

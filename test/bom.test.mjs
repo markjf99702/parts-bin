@@ -1,7 +1,7 @@
 // BOM check: reading a pasted parts list, and finding each line in the inventory.  node --test
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseBom, matchPart } from '../js/bom.js';
+import { parseBom, matchPart, shortBy } from '../js/bom.js';
 
 test('a count first or last, or none', () => {
   assert.deepEqual(parseBom('2x XIAO ESP32-S3\n1 SCD41 breakout\n3 WS2812 strip segment\nM3 heat-set inserts x8\nSCD41 ×1\nLED strip, 3\nProto board\n# a note\n\n'), [
@@ -40,4 +40,10 @@ test('each line finds the part that holds most of its words', () => {
   assert.equal(matchPart('heat-set inserts', parts).p.id, 'm3');
   assert.equal(matchPart('SGP30', parts), null);
   assert.equal(matchPart('', parts), null);
+});
+
+test('a shortfall in metres or grams reads as a person would write it', () => {
+  assert.equal(shortBy(0.3, 0.1), 0.2);
+  assert.equal(shortBy(1.25, 0.5), 0.75);
+  assert.equal(shortBy(5, 2), 3);
 });
