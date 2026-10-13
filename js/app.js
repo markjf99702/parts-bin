@@ -205,7 +205,7 @@ function renderParts(m){
   if(cur==='__low') parts=parts.filter(isLow); else if(cur==='__unbagged') parts=parts.filter(p=>!p.bag); else if(cur==='__bagged') parts=parts.filter(p=>p.bag); else if(cur==='__check') parts=parts.filter(p=>p.check); else if(cur) parts=parts.filter(p=>p.category===cur);
   if(cur==='__bagged') parts.sort((a,b)=>Number(a.bag)-Number(b.bag));
   else if(!S.q) parts.sort((a,b)=>a.name.localeCompare(b.name));
-  if(!parts.length){ m.append(h('<div class="empty"><p>No parts here yet. Add one, or use Scan in to photograph a part and let it be identified.</p></div>')); return; }
+  if(!parts.length){ m.append(h(`<div class="empty"><p>${S.parts.size?'No parts match.':'No parts here yet. Add one, or use Pack to bag and tag them as you go.'}</p></div>`)); return; }
   const l=h('<div class="list"></div>'); for(const p of parts) l.append(partRow(p,true)); m.append(l);
 }
 function renderPartPage(m, pid){
@@ -675,7 +675,7 @@ function renderInbox(m){
   const bare=[...S.parts.values()].filter(lacksDetails);
   const det=h(`<section class="card"><h3>Fill in details</h3>
     <p class="muted">Claude can suggest a category, interface, I2C address, voltages, a part number, a link and a reference photo for parts you already have, and flag the ones worth testing. Ask it to fill in details for your Parts Bin parts, or send it the list from here. The suggestions come back to this inbox, and nothing changes until you apply it.</p>
-    <div class="row">${bare.length?`<button class="btn" id="inb-share">Send Claude ${bare.length} part${bare.length===1?'':'s'} with no details</button>`:'<span class="tiny">Every part has some details already.</span>'}</div></section>`);
+    ${bare.length?`<div class="row"><button class="btn" id="inb-share">Send Claude ${bare.length} part${bare.length===1?'':'s'} with no details</button></div>`:S.parts.size?'<div class="row"><span class="tiny">Every part has some details already.</span></div>':''}</section>`);
   det.querySelector('#inb-share')?.addEventListener('click',()=>sendToClaude(bare));
   m.append(det);
   wireRefs(m);

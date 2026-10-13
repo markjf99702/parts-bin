@@ -341,6 +341,11 @@ assert.deepEqual(bagged, ['#001', '#002', '#003', '#004', '#005', '#006'], 'Bagg
 await page.selectOption('#cat', '');
 await page.fill('#q', '0x62'); await page.waitForFunction(() => document.querySelectorAll('.item').length === 1);
 assert.equal(await page.textContent('.item .t'), 'SCD41'); await page.fill('#q', ''); await page.waitForFunction(() => document.querySelectorAll('.item').length > 1);
+// nothing found is "No parts match.", not "No parts here yet"
+await page.fill('#q', 'zzzz'); await page.waitForSelector('#main .empty:has-text("No parts match.")');
+await page.fill('#q', ''); await page.waitForFunction(() => document.querySelectorAll('.item').length > 1);
+await page.selectOption('#cat', '__low'); await page.waitForSelector('#main .empty:has-text("No parts match.")');
+await page.selectOption('#cat', '');
 
 // ---- a receipt adds to what's in stock, and a part that's already bagged isn't tagged again
 await page.goto(base + '#' + await IN.encode({ partsbin: 1, batch: { id: 'ptest-receipt', name: 'Order 1234', source: 'receipt', items: [{ name: 'TCA9548A I2C multiplexer', qty: 3, match: tca.id }, { name: 'Mystery <b>board</b><img src=x onerror=window.__xss=1>', notes: '<i>hi</i>' }] } }));
@@ -488,6 +493,11 @@ await ai.click('.sheet #cancel');
 await ai.goto(base + '#bom'); await ai.fill('#bom', '1 SCD41'); await ai.click('#smart');
 await ai.waitForSelector('#toast:has-text("The API key was refused")');
 await ai.waitForSelector('.bom-summary');
+// with nothing in the inventory yet: Parts points at Pack (it used to be "Scan in"), and the Inbox doesn't say every part
+// has details
+await ai.goto(base + '#parts'); assert.match(await ai.textContent('#main .empty'), /^No parts here yet\. Add one, or use Pack/);
+await ai.goto(base + '#inbox'); await ai.waitForSelector('text=Fill in details');
+assert.equal(await ai.locator('text=Every part has some details already').count(), 0);
 await aiCtx.close();
 
 // ---- every control has a name a screen reader can say, a sheet is named by its heading, and toasts are announced
