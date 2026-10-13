@@ -214,6 +214,19 @@ await page.waitForSelector('.bom-summary');
 const summary = await page.textContent('.bom-summary');
 assert.match(summary, /2 have/); assert.match(summary, /1 missing/);
 await page.screenshot({ path: join(root, 'docs/phone-bom.png') });
+// a list typed but not checked yet stays through another screen, a reload, and Save as project
+await page.fill('#bom', '1 SCD41\n2 heat-set inserts');
+await page.click('#tabbar [data-go="parts"]'); await page.waitForSelector('#cat');
+await page.click('#tabbar [data-go="bom"]'); await page.waitForSelector('#bom');
+assert.equal(await page.inputValue('#bom'), '1 SCD41\n2 heat-set inserts');
+await page.reload(); await page.waitForSelector('#bom');
+assert.equal(await page.inputValue('#bom'), '1 SCD41\n2 heat-set inserts');
+await page.fill('#bom', '3 WS2812 strip segment');
+page.once('dialog', d => d.accept('Lamp'));
+await page.click('#save');
+await page.waitForFunction(() => Object.values(JSON.parse(localStorage.getItem('parts-bin')).items.projects).some(p => p.name === 'Lamp'));
+await page.waitForTimeout(100);
+assert.equal(await page.inputValue('#bom'), '3 WS2812 strip segment');
 
 // ---- Inbox: a link from Claude brings parts to check; each is saved and tagged from its card
 const IN = await import('../js/inbox.js');

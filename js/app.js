@@ -253,6 +253,7 @@ function renderBom(m){
     <div id="out" style="margin-top:14px"></div></div>`);
   m.append(ui);
   const ta=ui.querySelector('#bom'), out=ui.querySelector('#out');
+  ta.oninput=()=>localSet('sr.bom',ta.value); // kept as it's typed, so another screen, a reload or a redraw doesn't lose it
   ui.querySelector('#proj').onchange=e=>{ const p=S.projects.get(e.target.value); if(p){ ta.value=p.text; localSet('sr.bom',p.text); run(); } };
   function run(rows){
     localSet('sr.bom',ta.value);
