@@ -33,7 +33,7 @@ function parseHash(){ const h=location.hash.replace(/^#\/?/,''); const [view,...
 function go(view,arg){ location.hash = arg ? `#${view}/${arg}` : `#${view}`; }
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function id(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); }
-function toast(msg,ms=1800){ const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(t._t); t._t=setTimeout(()=>t.hidden=true,ms); }
+function toast(msg,ms=1800){ const t=document.getElementById('toast'), say=document.getElementById('say'); t.textContent=say.textContent=msg; t.hidden=false; clearTimeout(t._t); t._t=setTimeout(()=>{ t.hidden=true; say.textContent=''; },ms); }
 function h(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild; }
 function fmtQty(p){ return (p.qty ?? 0) + (p.unit && p.unit!=='pcs' ? ' '+p.unit : ''); }
 function binOf(p){ return p.binId ? S.bins.get(p.binId) : null; }
@@ -101,7 +101,7 @@ function renderNav(){
   document.getElementById('sidefoot').innerHTML = `${b} bins · ${n} parts${low?` · <span style="color:var(--warn)">${low} low</span>`:''}<br>${S.canWrite?'':'read-only view'}`;
 }
 function topbar(m, title, extra=''){
-  const el=h(`<div class="topbar"><h2>${esc(title)}</h2><div class="search">${ICONS.search}<input id="q" type="search" placeholder="Search parts, bins, bag numbers…" value="${esc(S.q)}" autocomplete="off"></div>${NFC_OK&&!FRAMED?`<button class="btn icon${reading?' on':''}" id="readtag" aria-label="Tap a tag to open it" title="Tap a tag to open it">${ICONS.nfc}</button>`:''}${extra}</div>`);
+  const el=h(`<div class="topbar"><h2>${esc(title)}</h2><div class="search">${ICONS.search}<input id="q" type="search" aria-label="Search" placeholder="Search parts, bins, bag numbers…" value="${esc(S.q)}" autocomplete="off"></div>${NFC_OK&&!FRAMED?`<button class="btn icon${reading?' on':''}" id="readtag" aria-label="Tap a tag to open it" title="Tap a tag to open it">${ICONS.nfc}</button>`:''}${extra}</div>`);
   m.append(el);
   el.querySelector('#readtag')?.addEventListener('click', readTag);
   const q=el.querySelector('#q'); let t; q.oninput=()=>{ clearTimeout(t); t=setTimeout(()=>{ S.q=q.value; render(); const nq=document.getElementById('q'); if(nq){ nq.focus(); nq.setSelectionRange(nq.value.length,nq.value.length);} },160); };
@@ -178,7 +178,7 @@ function renderBin(m, binId){
   if(isBox(b)&&S.canWrite){
     // unpack helper: move bags out of the box into a bin. The bin picked stays picked while the page redraws after each move.
     const bins=[...S.bins.values()].filter(x=>!isBox(x)).sort(binCodeSort);
-    const bar=h(`<div class="row" style="margin-bottom:10px"><span class="muted">Unpack into</span><select id="unpack-to" style="width:auto"><option value="">choose a bin…</option>${bins.map(x=>`<option value="${x.id}" ${x.id===unpackTo?'selected':''}>${esc(x.code)} · ${esc(x.name||'')}</option>`).join('')}</select><span class="tiny">then tap a bag's ⇢</span></div>`);
+    const bar=h(`<div class="row" style="margin-bottom:10px"><label class="muted" for="unpack-to">Unpack into</label><select id="unpack-to" style="width:auto"><option value="">choose a bin…</option>${bins.map(x=>`<option value="${x.id}" ${x.id===unpackTo?'selected':''}>${esc(x.code)} · ${esc(x.name||'')}</option>`).join('')}</select><span class="tiny">then tap a bag's ⇢</span></div>`);
     bar.querySelector('#unpack-to').onchange=e=>{ unpackTo=e.target.value; };
     m.append(bar);
     const l=h('<div class="list"></div>');
@@ -198,7 +198,7 @@ function printList(b, ps){
 function renderParts(m){
   const cats=[...new Set([...S.parts.values()].map(p=>p.category).filter(Boolean))].sort();
   const cur=localGet('sr.cat','');
-  const tb=topbar(m,'Parts', `<select id="cat" style="width:auto"><option value="">All categories</option>${cats.map(c=>`<option ${c===cur?'selected':''}>${esc(c)}</option>`).join('')}<option value="__low" ${cur==='__low'?'selected':''}>Low stock</option><option value="__unbagged" ${cur==='__unbagged'?'selected':''}>Not yet bagged</option><option value="__bagged" ${cur==='__bagged'?'selected':''}>Bagged</option><option value="__check" ${cur==='__check'?'selected':''}>To check</option></select>${S.canWrite?`<button class="btn primary" id="addp">${ICONS.plus} Part</button>`:''}`);
+  const tb=topbar(m,'Parts', `<select id="cat" aria-label="Category" style="width:auto"><option value="">All categories</option>${cats.map(c=>`<option ${c===cur?'selected':''}>${esc(c)}</option>`).join('')}<option value="__low" ${cur==='__low'?'selected':''}>Low stock</option><option value="__unbagged" ${cur==='__unbagged'?'selected':''}>Not yet bagged</option><option value="__bagged" ${cur==='__bagged'?'selected':''}>Bagged</option><option value="__check" ${cur==='__check'?'selected':''}>To check</option></select>${S.canWrite?`<button class="btn primary" id="addp">${ICONS.plus} Part</button>`:''}`);
   tb.querySelector('#cat').onchange=e=>{ localSet('sr.cat',e.target.value); render(); };
   tb.querySelector('#addp')?.addEventListener('click',()=>editPart({}));
   let parts=searchParts(S.q);
@@ -224,7 +224,7 @@ function renderPartPage(m, pid){
     ${/^https?:\/\//i.test(p.link||'')?`<div class="tiny" style="margin-top:4px"><a href="${esc(p.link)}" target="_blank" rel="noopener">Product link</a></div>`:''}
   </div></div>`));
   if(S.canWrite){
-    const q=h(`<div class="row" style="margin:6px 0 14px"><span class="muted">Quantity</span><div class="qty"><button class="btn icon" id="dec" aria-label="Use one">−</button><input id="qv" type="number" min="0" step="any" value="${esc(p.qty??0)}"><button class="btn icon" id="inc" aria-label="Add one">+</button></div><span class="tiny">${esc(p.unit||'pcs')}${p.minQty!=null&&p.minQty!==''?` · reorder at ${esc(p.minQty)}`:''}</span></div>`);
+    const q=h(`<div class="row" style="margin:6px 0 14px"><label class="muted" for="qv">Quantity</label><div class="qty"><button class="btn icon" id="dec" aria-label="Use one">−</button><input id="qv" type="number" min="0" step="any" value="${esc(p.qty??0)}"><button class="btn icon" id="inc" aria-label="Add one">+</button></div><span class="tiny">${esc(p.unit||'pcs')}${p.minQty!=null&&p.minQty!==''?` · reorder at ${esc(p.minQty)}`:''}</span></div>`);
     m.append(q);
     const inp=q.querySelector('#qv'); const save=async(v)=>{ v=Math.max(0,Number(v)); if(!isFinite(v)) return; inp.value=v; if(v!==Number(p.qty||0)) await writePart({...p, qty:v}); }; // a count stops at zero
     q.querySelector('#dec').onclick=()=>save(Number(inp.value)-1); q.querySelector('#inc').onclick=()=>save(Number(inp.value)+1);
@@ -247,7 +247,7 @@ function renderBom(m){
   const saved=[...S.projects.values()].sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
   const last=localGet('sr.bom','');
   const ui=h(`<div>
-    <div class="row" style="margin-bottom:8px"><select id="proj" style="width:auto"><option value="">Saved BOMs…</option>${saved.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><span class="grow"></span></div>
+    <div class="row" style="margin-bottom:8px"><select id="proj" aria-label="Saved BOMs" style="width:auto"><option value="">Saved BOMs…</option>${saved.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><span class="grow"></span></div>
     <div class="field"><label for="bom">Parts list — one per line, quantity first or last (<code>2x XIAO ESP32-S3</code>, <code>SCD41 ×1</code>)</label><textarea id="bom" placeholder="2x XIAO ESP32-S3&#10;1 SCD41 breakout&#10;3 WS2812 strip segment&#10;M3 heat-set inserts x8">${esc(last)}</textarea></div>
     <div class="row"><button class="btn primary" id="check">Check against inventory</button>${S.sample?'<button class="btn" id="smart">Smarter matching</button>':''}<span class="grow"></span>${S.canWrite?'<button class="btn" id="save">Save as project</button>':''}</div>
     <div id="out" style="margin-top:14px"></div></div>`);
@@ -301,7 +301,7 @@ function renderScan(m){
   let dest=localGet('sr.packbox',''); if(!S.bins.has(dest)) dest='';
   const nb=nextBag();
   const head=h(`<div class="packhead">
-    <div><div class="lbl">Packing into</div><div class="row" style="margin-top:4px"><select id="dest" style="flex:1 1 170px;min-width:0;width:auto"><option value="">— pick a box or bin —</option>${conts.map(c=>`<option value="${c.id}" ${c.id===dest?'selected':''}>${esc(c.code)} · ${esc(c.name||'')}</option>`).join('')}</select><button class="btn sm" id="newbox">${ICONS.plus} Box</button></div></div>
+    <div><label class="lbl" for="dest">Packing into</label><div class="row" style="margin-top:4px"><select id="dest" style="flex:1 1 170px;min-width:0;width:auto"><option value="">— pick a box or bin —</option>${conts.map(c=>`<option value="${c.id}" ${c.id===dest?'selected':''}>${esc(c.code)} · ${esc(c.name||'')}</option>`).join('')}</select><button class="btn sm" id="newbox">${ICONS.plus} Box</button></div></div>
     <div style="text-align:right"><div class="lbl">Next bag</div><div class="big">${bagStr(nb)}</div></div></div>`);
   m.append(head);
   head.querySelector('#dest').onchange=e=>{ localSet('sr.packbox',e.target.value); };
@@ -380,6 +380,7 @@ function sheet(html){
   const onKey=e=>{ if(e.key==='Escape') close(); };
   document.addEventListener('keydown',onKey);
   function close(){ root.innerHTML=''; document.removeEventListener('keydown',onKey); }
+  const title=bg.querySelector('.sheet h3'); if(title){ title.id='sheet-title'; bg.firstElementChild.setAttribute('aria-labelledby','sheet-title'); }
   root.append(bg); wirePhoto(bg); const f=bg.querySelector('input:not([type=file]),textarea,select'); f&&f.focus();
   return {el:bg.querySelector('.sheet'), close};
 }

@@ -467,6 +467,16 @@ await ai.goto(base + '#bom'); await ai.fill('#bom', '1 SCD41'); await ai.click('
 await ai.waitForSelector('#toast:has-text("The API key was refused")');
 await ai.waitForSelector('.bom-summary');
 await aiCtx.close();
+
+// ---- every control has a name a screen reader can say, a sheet is named by its heading, and toasts are announced
+const named = async (hash, role, name) => { await page.goto(base + hash); assert.equal(await page.getByRole(role, { name, exact: true }).count(), 1, `${hash}: a ${role} called "${name}"`); };
+await named('#parts', 'searchbox', 'Search'); await named('#parts', 'combobox', 'Category');
+await named('#bin/box-move', 'combobox', 'Unpack into'); await named('#bom', 'combobox', 'Saved BOMs');
+await named('#scan', 'combobox', 'Packing into'); await named('#part/p-scd41', 'spinbutton', 'Quantity');
+await page.click('#edit');
+assert.equal(await page.getByRole('dialog', { name: 'Edit part' }).count(), 1);
+await page.click('.sheet #save');
+await page.waitForFunction(() => document.querySelector('[role="status"]')?.textContent === 'Saved');
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 
