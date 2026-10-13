@@ -39,7 +39,10 @@ function fmtQty(p){ return (p.qty ?? 0) + (p.unit && p.unit!=='pcs' ? ' '+p.unit
 function binOf(p){ return p.binId ? S.bins.get(p.binId) : null; }
 function partsInBin(binId){ return [...S.parts.values()].filter(p=>p.binId===binId).sort((a,b)=>a.name.localeCompare(b.name)); }
 function binCodeSort(a,b){ return a.code.localeCompare(b.code, undefined, {numeric:true}); }
-function assetUrl(idv){ return idv ? '/_blob/'+idv : ''; }
+// Photos taken in the Stockroom artifact are kept in its own store on claude.ai, which this page can't reach (S.assets is
+// that store, and there isn't one here). Their ids stay in the data, and the icon or a reference photo shows instead.
+function assetUrl(idv){ return idv && S.assets ? '/_blob/'+idv : ''; }
+function photoImg(idv){ const u=assetUrl(idv); return u ? `<img src="${u}" alt="">` : ''; }
 function isBox(b){ return !!b && b.kind==='box'; }
 function nextBag(){ let m=0; for(const p of S.parts.values()) if(Number(p.bag)>m) m=Number(p.bag); return m+1; }
 function bagStr(n){ return n ? '#'+String(n).padStart(3,'0') : ''; }
@@ -122,7 +125,7 @@ function renderBins(m){
     m.append(h(`<div class="section-h"><h3>Moving boxes</h3><span class="tiny">${boxes.length} box${boxes.length===1?'':'es'} · ${packed} bag${packed===1?'':'s'} packed</span></div>`));
     const g=h('<div class="bins"></div>');
     for(const b of boxes){ const ps=partsInBin(b.id);
-      const c=h(`<button type="button" class="bin"><div class="photo">${b.photo?`<img src="${assetUrl(b.photo)}" alt="">`:ICONS.box}</div><div class="body"><div><span class="label box">${esc(b.code)}</span></div><div class="name">${esc(b.name||'')}</div><div class="meta"><span>${ps.length} bag${ps.length===1?'':'s'}</span>${b.sealed?'<span>sealed</span>':''}</div></div></button>`);
+      const c=h(`<button type="button" class="bin"><div class="photo">${photoImg(b.photo)||ICONS.box}</div><div class="body"><div><span class="label box">${esc(b.code)}</span></div><div class="name">${esc(b.name||'')}</div><div class="meta"><span>${ps.length} bag${ps.length===1?'':'s'}</span>${b.sealed?'<span>sealed</span>':''}</div></div></button>`);
       c.onclick=()=>go('bin',b.id); g.append(c); }
     m.append(g);
   }
@@ -132,7 +135,7 @@ function renderBins(m){
     const g=h('<div class="bins"></div>');
     for(const b of list){
       const ps=partsInBin(b.id); const low=ps.filter(isLow).length;
-      const c=h(`<button type="button" class="bin"><div class="photo">${b.photo?`<img src="${assetUrl(b.photo)}" alt="">`:ICONS.box}</div><div class="body"><div><span class="label">${esc(b.code)}</span></div><div class="name">${esc(b.name||'')}</div><div class="meta"><span>${ps.length} part${ps.length===1?'':'s'}</span>${low?`<span style="color:var(--warn)">${low} low</span>`:''}</div></div></button>`);
+      const c=h(`<button type="button" class="bin"><div class="photo">${photoImg(b.photo)||ICONS.box}</div><div class="body"><div><span class="label">${esc(b.code)}</span></div><div class="name">${esc(b.name||'')}</div><div class="meta"><span>${ps.length} part${ps.length===1?'':'s'}</span>${low?`<span style="color:var(--warn)">${low} low</span>`:''}</div></div></button>`);
       c.onclick=()=>go('bin',b.id); g.append(c);
     }
     m.append(g);
@@ -173,7 +176,7 @@ function renderBin(m, binId){
   head.querySelector('#pack')?.addEventListener('click',()=>{ localSet('sr.packbox',b.id); go('scan'); });
   head.querySelector('#print').onclick=()=>printList(b,ps);
   head.querySelector('#copy').onclick=()=>copyText(ps.map(p=>`${p.bag?bagStr(p.bag)+' ':''}${p.name}${p.qty!=null?' ×'+p.qty:''}`).join('\n'),'List copied — paste into Manifest','Copy the list');
-  m.append(h(`<div class="binhead"><div class="photo">${b.photo?`<img src="${assetUrl(b.photo)}" alt="">`:ICONS.box}</div><div><span class="label lg ${isBox(b)?'box':''}">${esc(b.code)}</span><h2>${esc(b.name||'')}</h2><div class="muted">${esc(b.location||'')}${b.notes?` · ${esc(b.notes)}`:''}</div><div class="tiny" style="margin-top:6px">${ps.length} ${isBox(b)?'bag':'part'}${ps.length===1?'':'s'}${b.tagWritten?' · NFC tag written':''}${b.sealed?' · sealed':''}</div></div></div>`));
+  m.append(h(`<div class="binhead"><div class="photo">${photoImg(b.photo)||ICONS.box}</div><div><span class="label lg ${isBox(b)?'box':''}">${esc(b.code)}</span><h2>${esc(b.name||'')}</h2><div class="muted">${esc(b.location||'')}${b.notes?` · ${esc(b.notes)}`:''}</div><div class="tiny" style="margin-top:6px">${ps.length} ${isBox(b)?'bag':'part'}${ps.length===1?'':'s'}${b.tagWritten?' · NFC tag written':''}${b.sealed?' · sealed':''}</div></div></div>`));
   if(!ps.length){ m.append(h(`<div class="empty"><p>${isBox(b)?'Nothing packed in this box yet.':'Nothing in this bin yet.'}</p></div>`)); return; }
   if(isBox(b)&&S.canWrite){
     // unpack helper: move bags out of the box into a bin. The bin picked stays picked while the page redraws after each move.
@@ -215,8 +218,8 @@ function renderPartPage(m, pid){
   m.append(head); head.querySelector('#back').onclick=()=>history.length>1?history.back():go('parts');
   head.querySelector('#edit')?.addEventListener('click',()=>editPart(p));
   if(S.canWrite){ const tg=h(`<button class="btn sm">${ICONS.nfc} Bag tag</button>`); tg.onclick=()=>tagSheet(p,'part'); head.querySelector('#edit').before(tg); }
-  const ref=!p.photo&&p.img;
-  m.append(h(`<div class="binhead"><div class="photo${ref?' refphoto':''}"${ref?' role="button" tabindex="0" aria-label="Reference photo, tap to enlarge"':''}>${p.photo?`<img src="${assetUrl(p.photo)}" alt="">`:ICONS.parts+refImg(p)}</div><div>
+  const ref=!assetUrl(p.photo)&&p.img;
+  m.append(h(`<div class="binhead"><div class="photo${ref?' refphoto':''}"${ref?' role="button" tabindex="0" aria-label="Reference photo, tap to enlarge"':''}>${photoImg(p.photo)||ICONS.parts+refImg(p)}</div><div>
     <h2>${esc(p.name)}</h2>
     <div class="row" style="gap:6px;margin:4px 0 8px">${p.category?`<span class="chip">${esc(p.category)}</span>`:''}${specChips(p)}${(p.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}${isLow(p)?'<span class="chip warn">low stock</span>':''}</div>
     <div class="muted">${p.bag?`<span class="bagno">${bagStr(p.bag)}</span> `:''}${b?`In <a href="#bin/${b.id}"><span class="label ${isBox(b)?'box':''}">${esc(b.code)}</span></a> ${esc(b.name||'')}${b.location?` · ${esc(b.location)}`:''}`:'Not in a bin'}${p.from?` <span class="tiny">· was in ${esc(p.from)}</span>`:''}</div>

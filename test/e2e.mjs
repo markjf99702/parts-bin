@@ -559,6 +559,13 @@ await page.waitForSelector('.sheet textarea');
 assert.equal(await page.inputValue('.sheet textarea'), '0.2 × m heat shrink tubing 3mm');
 await page.click('.sheet #done');
 await page.reload(); // the pretend clipboard again
+
+// ---- photo ids from the Stockroom artifact (its photos stayed on claude.ai) show the icon, or the reference photo
+const blobs = []; page.on('request', r => { if (r.url().includes('/_blob/')) blobs.push(r.url()); });
+await page.evaluate(() => { const d = JSON.parse(localStorage.getItem('parts-bin')); d.items.bins['bin-env'].photo = 'asset-abc123'; d.items.parts['p-scd41'].photo = 'asset-def456'; localStorage.setItem('parts-bin', JSON.stringify(d)); dispatchEvent(new StorageEvent('storage', { key: 'parts-bin' })); });
+await page.goto(base + '#bins'); await page.waitForSelector('.bin:has-text("Environmental") .photo svg');
+await page.goto(base + '#part/p-scd41'); await page.waitForFunction(() => document.querySelector('.binhead .refphoto img.ref')?.naturalWidth > 0);
+assert.deepEqual(blobs, [], 'asked this site for a photo it can’t have');
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 
