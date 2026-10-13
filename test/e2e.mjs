@@ -114,7 +114,6 @@ await page.fill('#p-qty', '50');
 assert.ok(await page.isChecked('#p-dotag'));
 assert.equal(await page.textContent('#p-bagshow'), '#003');
 assert.equal(await page.textContent('.sheet #save'), 'Save & tag');
-await page.screenshot({ path: join(root, 'docs/phone-add.png') });
 await page.click('.sheet #save');
 await page.waitForSelector('#tz.wait');
 await page.evaluate(() => window.__tap());
