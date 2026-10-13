@@ -61,7 +61,7 @@ a{color:var(--accent-ink)}
 @media(max-width:760px){
   .app{grid-template-columns:minmax(0,1fr)}
   .side{display:none}
-  .main{padding:14px 16px 96px}
+  .main{padding:14px 16px 16px}
   .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));z-index:5}
   .tabbar button{flex:1;background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:600;color:var(--ink3);padding:4px 0;border-radius:var(--r)}
   .tabbar button svg{width:22px;height:22px}
@@ -203,6 +203,8 @@ a{color:var(--accent-ink)}
 .jd-foot{text-align:center;font-size:12.5px;color:var(--ink3);padding:30px 0 8px}
 .jd-foot a{color:inherit;text-decoration:none}
 .jd-foot a:hover,.jd-foot a:focus-visible{text-decoration:underline}
+/* on a phone the footer ends above the tab bar, so it can be seen and tapped */
+@media(max-width:760px){.jd-foot{padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}}
 @media(max-width:760px){ body:has(#cloud-m:not([hidden])) :is(.topbar,.pagehead){padding-right:46px} }
 
 .bagtag{display:grid;grid-template-columns:auto auto 1fr;gap:4px 12px;align-items:center;border:2px dashed var(--line);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;cursor:pointer}
