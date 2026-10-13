@@ -120,14 +120,19 @@ await page.waitForFunction(() => !document.querySelector('.sheet'));
 assert.match((await page.evaluate(() => window.__written)).at(-1), /#bag\/003$/);
 const ins = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('parts-bin')).items.parts).find(x => x.name === 'M3 heat-set inserts'));
 assert.equal(ins.bag, 3); assert.equal(ins.qty, 50); assert.equal(ins.tagWritten, true);
-// unticking it saves without a bag or a tag
+// unticking it saves without a bag or a tag (ticking it again brings the number back)
 await page.click('#addp');
 await page.fill('#p-name', 'Loose spare');
+assert.equal(await page.inputValue('#p-bag'), '4');
 await page.uncheck('#p-dotag');
-await page.fill('#p-bag', '');
+assert.equal(await page.inputValue('#p-bag'), '', 'unticked, the bag number it filled in goes');
+await page.check('#p-dotag');
+assert.equal(await page.inputValue('#p-bag'), '4');
+await page.uncheck('#p-dotag');
 await page.click('.sheet #save');
 await page.waitForFunction(() => !document.querySelector('.sheet'));
 assert.equal((await page.evaluate(() => window.__written)).length, 3);
+assert.ok(!(await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('parts-bin')).items.parts).find(x => x.name === 'Loose spare').bag)), 'saved without a bag');
 
 // ---- Bag tag on the page of a part that has no bag yet: it gets the next number, and the tag carries it
 const spareId = await page.evaluate(() => Object.entries(JSON.parse(localStorage.getItem('parts-bin')).items.parts).find(([, x]) => x.name === 'Loose spare')[0]);
@@ -149,7 +154,7 @@ assert.equal((await page.evaluate(() => window.__written)).at(-1), base + '#bag/
 assert.equal((await spare()).bag, 4); assert.equal((await spare()).tagWritten, true);
 assert.equal(await page.textContent('.binhead .bagno'), '#004');
 // if the number is taken while the sheet is open (another tab, a sync), it stops rather than double up
-await page.goto(base + '#parts'); await page.click('#addp'); await page.fill('#p-name', 'Second spare'); await page.uncheck('#p-dotag'); await page.fill('#p-bag', ''); await page.click('.sheet #save');
+await page.goto(base + '#parts'); await page.click('#addp'); await page.fill('#p-name', 'Second spare'); await page.uncheck('#p-dotag'); await page.click('.sheet #save');
 await page.waitForFunction(() => !document.querySelector('.sheet'));
 const second = await page.evaluate(() => Object.entries(JSON.parse(localStorage.getItem('parts-bin')).items.parts).find(([, x]) => x.name === 'Second spare')[0]);
 await page.goto(base + '#part/' + second); await page.click('text=Bag tag');

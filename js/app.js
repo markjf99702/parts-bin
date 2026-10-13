@@ -444,7 +444,10 @@ function editPart(p, opts={}){
     <div class="actions">${!isNew?'<button class="btn danger left" id="del">Delete</button>':''}<button class="btn" id="cancel">Cancel</button><button class="btn primary" id="save">Save</button></div>`);
   el.querySelector('#cancel').onclick=close;
   const dotag=el.querySelector('#p-dotag'), bagIn=el.querySelector('#p-bag'), saveBtn=el.querySelector('#save'), show=el.querySelector('#p-bagshow');
-  const syncTag=()=>{ if(dotag.checked && bagIn.value==='') bagIn.value=String(p.bag||nextBag()); show.textContent=bagStr(Number(bagIn.value)||nextBag()); saveBtn.textContent=dotag.checked&&NFC_OK&&!FRAMED?'Save & tag':'Save'; el.querySelector('.bagtag').classList.toggle('on',dotag.checked); };
+  // Ticking the box fills in the next bag number; unticking it takes back a number it filled in, so the part is saved
+  // without a bag. A number typed in, or the part's own bag, stays.
+  let filled='';
+  const syncTag=()=>{ if(dotag.checked && bagIn.value==='') bagIn.value=filled=String(p.bag||nextBag()); else if(!dotag.checked && !p.bag && filled && bagIn.value===filled){ bagIn.value=''; filled=''; } show.textContent=bagStr(Number(bagIn.value)||nextBag()); saveBtn.textContent=dotag.checked&&NFC_OK&&!FRAMED?'Save & tag':'Save'; el.querySelector('.bagtag').classList.toggle('on',dotag.checked); };
   dotag.onchange=syncTag; bagIn.oninput=syncTag; syncTag();
   el.querySelector('#del')?.addEventListener('click', async()=>{ if(!confirm('Delete this part?')) return; await S.db.doc('parts/'+p.id).delete(); close(); go('parts'); });
   el.querySelector('#save').onclick=async()=>{
