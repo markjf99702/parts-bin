@@ -503,6 +503,11 @@ await chooser3.setFiles(farFile);
 await page.waitForSelector('text=Loaded: 1 item');
 await page.goto(base + '#parts'); await page.reload();
 await page.waitForSelector('.item:has-text("BME280 (Adafruit)")'); await page.waitForSelector('.item:has-text("From the far future")');
+
+// ---- the buttons tapped over and over while counting and unpacking are big enough for a thumb (44 px)
+const big = async sel => { const b = await page.locator(sel).first().boundingBox(); assert.ok(b.width >= 44 && b.height >= 44, `${sel} is ${b.width}×${b.height}`); };
+await page.goto(base + '#part/p-bme280'); await big('#dec'); await big('#inc');
+await page.goto(base + '#bin/box-move'); await big('button[aria-label$="to the chosen bin"]');
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 

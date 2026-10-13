@@ -124,7 +124,7 @@ a{color:var(--accent-ink)}
 .unpack{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;border-bottom:1px solid var(--line)}
 .unpack:last-child{border-bottom:0}
 .unpack .item{border-bottom:0;padding-right:8px}
-.unpack>.btn{margin:10px 14px 10px 0;font-family:"JetBrains Mono",monospace}
+.unpack>.btn{margin:4px 14px 4px 0;font-family:"JetBrains Mono",monospace;min-width:44px;min-height:44px;justify-content:center}
 .section-h{display:flex;align-items:baseline;gap:10px;margin:22px 0 10px}
 .section-h h3{font-size:19px}
 .section-h .tiny{margin-left:auto}
@@ -139,6 +139,7 @@ a{color:var(--accent-ink)}
 .sheet .actions .left{margin-right:auto}
 .qty{display:flex;align-items:center;gap:6px}
 .qty input{width:80px;text-align:center;font-family:"JetBrains Mono",monospace}
+.qty .btn.icon{min-width:44px;min-height:44px;justify-content:center} /* − and +, tapped over and over while counting */
 
 /* ---- bin page ---- */
 .binhead{display:grid;grid-template-columns:120px minmax(0,1fr);gap:16px;align-items:start;margin-bottom:16px}
