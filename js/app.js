@@ -182,7 +182,7 @@ function renderBin(m, binId){
     bar.querySelector('#unpack-to').onchange=e=>{ unpackTo=e.target.value; };
     m.append(bar);
     const l=h('<div class="list"></div>');
-    for(const p of ps){ const r=partRow(p,false); const mv=h('<button class="btn sm" aria-label="Move to chosen bin" style="margin-left:8px">⇢</button>'); mv.onclick=async e=>{ e.stopPropagation(); const to=bar.querySelector('#unpack-to').value; if(!to){ toast('Choose a bin first'); return; } await writePart({...p, binId:to, box:''}); toast(`${bagStr(p.bag)||p.name} → ${S.bins.get(to)?.code}`); }; r.querySelector('.q').append(mv); l.append(r); }
+    for(const p of ps){ const row=h('<div class="unpack"></div>'), mv=h(`<button type="button" class="btn sm" aria-label="Move ${esc(bagStr(p.bag)||p.name)} to the chosen bin">⇢</button>`); mv.onclick=async()=>{ const to=bar.querySelector('#unpack-to').value; if(!to){ toast('Choose a bin first'); return; } await writePart({...p, binId:to, box:''}); toast(`${bagStr(p.bag)||p.name} → ${S.bins.get(to)?.code}`); }; row.append(partRow(p,false), mv); l.append(row); } // the ⇢ beside the row's button, not inside it
     m.append(l); return;
   }
   const l=h('<div class="list"></div>'); for(const p of ps) l.append(partRow(p,false)); m.append(l);

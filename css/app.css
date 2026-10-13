@@ -120,6 +120,11 @@ a{color:var(--accent-ink)}
 .item .q{font-family:"JetBrains Mono",monospace;font-weight:600;font-size:14px;text-align:right;font-variant-numeric:tabular-nums}
 .item .q small{display:block;font-size:11px;color:var(--ink3);font-weight:400}
 .item.low .q{color:var(--warn)}
+/* a bag in a box being unpacked: its row, with the ⇢ that moves it beside it */
+.unpack{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;border-bottom:1px solid var(--line)}
+.unpack:last-child{border-bottom:0}
+.unpack .item{border-bottom:0;padding-right:8px}
+.unpack>.btn{margin:10px 14px 10px 0;font-family:"JetBrains Mono",monospace}
 .section-h{display:flex;align-items:baseline;gap:10px;margin:22px 0 10px}
 .section-h h3{font-size:19px}
 .section-h .tiny{margin-left:auto}
