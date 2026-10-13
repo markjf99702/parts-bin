@@ -4,13 +4,22 @@
 // Lower case, with anything but letters, digits, dots and plus signs read as a space: "ESP32-S3" is "esp32 s3".
 export const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9.+]+/g, ' ').trim();
 
-// One part per line (or per ;), with its count first or last: "2x XIAO ESP32-S3", "SCD41 ×1". Lines starting with # are skipped.
+// One part per line (or per ;), with its count first or last: "2x XIAO ESP32-S3", "SCD41 ×1". Lines starting with # are
+// skipped, and a bullet in front is dropped. A name can start with a digit (1N4148, 74HC595, 18650 cells), so each way of
+// writing a count says which side the count is on, and a marked count (2x, x8, ×2, ", 5") is believed before a bare
+// number at the start: "18650 cells ×2" is two 18650 cells.
+const N = '(\\d+(?:\\.\\d+)?)';
+const COUNTS = [ // [pattern, the count's group, the name's group]
+  [new RegExp(`^${N}\\s*[x×*]\\s+(.+)$`, 'i'), 1, 2], // 2x name, 2 x name
+  [new RegExp(`^(.+?)\\s+[x×*]\\s*${N}$`, 'i'), 2, 1], // name x8, name × 2
+  [new RegExp(`^(.+?)\\s*[,\\t]\\s*${N}$`), 2, 1], // name, 5 (or a tab, from a spreadsheet)
+  [new RegExp(`^${N}\\s+(.+)$`), 1, 2], // 3 name
+  [new RegExp(`^(.+?)[x×*]\\s*${N}$`, 'i'), 2, 1], // name×2
+];
 export function parseBom(text) {
-  return String(text || '').split(/\n|;/).map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => {
-    let qty = 1, name = l;
-    const mm = l.match(/^(\d+(?:\.\d+)?)\s*[x×*]?\s+(.+)$/i) || l.match(/^(.+?)\s*[x×*]\s*(\d+(?:\.\d+)?)$/i) || l.match(/^(.+?)\s*[,\t]\s*(\d+(?:\.\d+)?)$/);
-    if (mm) { if (/^\d/.test(mm[1])) { qty = Number(mm[1]); name = mm[2]; } else { qty = Number(mm[2]); name = mm[1]; } }
-    return { qty, name: name.replace(/^[-•*]\s*/, '').trim() };
+  return String(text || '').split(/\n|;/).map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => l.replace(/^[-•*]\s*/, '')).filter(Boolean).map(l => {
+    for (const [re, q, n] of COUNTS) { const m = re.exec(l); if (m) return { qty: Number(m[q]), name: m[n].trim() }; }
+    return { qty: 1, name: l };
   });
 }
 
