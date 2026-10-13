@@ -204,7 +204,7 @@ function renderParts(m){
   let parts=searchParts(S.q);
   if(cur==='__low') parts=parts.filter(isLow); else if(cur==='__unbagged') parts=parts.filter(p=>!p.bag); else if(cur==='__bagged') parts=parts.filter(p=>p.bag); else if(cur==='__check') parts=parts.filter(p=>p.check); else if(cur) parts=parts.filter(p=>p.category===cur);
   if(cur==='__bagged') parts.sort((a,b)=>Number(a.bag)-Number(b.bag));
-  if(!S.q) parts.sort((a,b)=>a.name.localeCompare(b.name));
+  else if(!S.q) parts.sort((a,b)=>a.name.localeCompare(b.name));
   if(!parts.length){ m.append(h('<div class="empty"><p>No parts here yet. Add one, or use Scan in to photograph a part and let it be identified.</p></div>')); return; }
   const l=h('<div class="list"></div>'); for(const p of parts) l.append(partRow(p,true)); m.append(l);
 }

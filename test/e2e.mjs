@@ -327,6 +327,9 @@ await page.goto(base + '#part/' + tca.id); // its photo is gone from the site it
 await page.waitForFunction(() => !document.querySelector('.binhead img.ref') && !document.querySelector('.binhead .refphoto') && document.querySelector('.binhead .photo svg'));
 await page.goto(base + '#parts'); await page.selectOption('#cat', '__check');
 assert.deepEqual(await page.locator('.item .t').allTextContents(), ['BME280 (Adafruit)']);
+await page.selectOption('#cat', '__bagged');
+const bagged = await page.locator('.item .bagno').allTextContents();
+assert.deepEqual(bagged, ['#001', '#002', '#003', '#004', '#005', '#006'], 'Bagged lists the parts in bag order');
 await page.selectOption('#cat', '');
 await page.fill('#q', '0x62'); await page.waitForFunction(() => document.querySelectorAll('.item').length === 1);
 assert.equal(await page.textContent('.item .t'), 'SCD41'); await page.fill('#q', ''); await page.waitForFunction(() => document.querySelectorAll('.item').length > 1);
