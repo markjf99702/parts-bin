@@ -68,25 +68,28 @@ function searchBins(q){
 }
 
 // ------------------------------------------------------------------ render
-let wasInbox=false;
+// The screen last drawn: drawing the same one again (after a save, a sync or a change in another tab) keeps the place
+// on the page, and a new screen starts at the top.
+let shown='';
 function render(){
   S.route = parseHash();
   renderNav();
+  const key=S.route.view+'/'+S.route.arg, y=key===shown?window.scrollY:0;
   const m=document.getElementById('main'); m.innerHTML='';
   if(!S.loaded){ m.append(h('<div class="empty"><p>Loading inventory…</p></div>')); return; }
   const v=S.route.view;
   if(linkCode()){ m.append(h('<div class="empty"><p class="think" style="justify-content:center">Opening the batch…</p></div>')); return; }
-  if(v==='inbox'){ const y=wasInbox?window.scrollY:0; wasInbox=true; renderInbox(m); window.scrollTo(0,y); return; }
-  wasInbox=false;
-  if(v==='bag'){ const n=Number(S.route.arg); const hit=[...S.parts.values()].find(p=>Number(p.bag)===n); if(hit){ renderPartPage(m, hit.id); window.scrollTo(0,0); return; } m.append(h(`<div class="empty"><h3>No bag ${esc(bagStr(n))}</h3><p>Nothing in the inventory has that bag number yet.</p></div>`)); return; }
-  if(v==='settings'){ renderSettings(m); window.scrollTo(0,0); return; }
-  if(v==='bin') renderBin(m, S.route.arg);
+  shown=key;
+  if(v==='inbox') renderInbox(m);
+  else if(v==='bag'){ const n=Number(S.route.arg); const hit=[...S.parts.values()].find(p=>Number(p.bag)===n); if(hit) renderPartPage(m, hit.id); else m.append(h(`<div class="empty"><h3>No bag ${esc(bagStr(n))}</h3><p>Nothing in the inventory has that bag number yet.</p></div>`)); }
+  else if(v==='settings') renderSettings(m);
+  else if(v==='bin') renderBin(m, S.route.arg);
   else if(v==='part') renderPartPage(m, S.route.arg);
   else if(v==='parts') renderParts(m);
   else if(v==='bom') renderBom(m);
   else if(v==='scan') renderScan(m);
   else renderBins(m);
-  window.scrollTo(0,0);
+  window.scrollTo(0,y);
 }
 function renderNav(){
   const cur = {bin:'bins',part:'parts',inbox:'scan'}[S.route.view] || S.route.view;
@@ -154,6 +157,7 @@ function partRow(p, showBin){
 }
 
 // ---- Bin page
+let unpackTo=''; // the bin picked under a box's Unpack into, for this visit
 function renderBin(m, binId){
   const b=S.bins.get(binId);
   if(!b){ m.append(h(`<div class="empty"><h3>Bin not found</h3><p>This tag or link points at a bin that no longer exists.</p><button class="btn" id="bk">All bins</button></div>`)); m.querySelector('#bk').onclick=()=>go('bins'); return; }
@@ -172,9 +176,10 @@ function renderBin(m, binId){
   m.append(h(`<div class="binhead"><div class="photo">${b.photo?`<img src="${assetUrl(b.photo)}" alt="">`:ICONS.box}</div><div><span class="label lg ${isBox(b)?'box':''}">${esc(b.code)}</span><h2>${esc(b.name||'')}</h2><div class="muted">${esc(b.location||'')}${b.notes?` · ${esc(b.notes)}`:''}</div><div class="tiny" style="margin-top:6px">${ps.length} ${isBox(b)?'bag':'part'}${ps.length===1?'':'s'}${b.tagWritten?' · NFC tag written':''}${b.sealed?' · sealed':''}</div></div></div>`));
   if(!ps.length){ m.append(h(`<div class="empty"><p>${isBox(b)?'Nothing packed in this box yet.':'Nothing in this bin yet.'}</p></div>`)); return; }
   if(isBox(b)&&S.canWrite){
-    // unpack helper: move bags out of the box into a bin
+    // unpack helper: move bags out of the box into a bin. The bin picked stays picked while the page redraws after each move.
     const bins=[...S.bins.values()].filter(x=>!isBox(x)).sort(binCodeSort);
-    const bar=h(`<div class="row" style="margin-bottom:10px"><span class="muted">Unpack into</span><select id="unpack-to" style="width:auto"><option value="">choose a bin…</option>${bins.map(x=>`<option value="${x.id}">${esc(x.code)} · ${esc(x.name||'')}</option>`).join('')}</select><span class="tiny">then tap a bag's ⇢</span></div>`);
+    const bar=h(`<div class="row" style="margin-bottom:10px"><span class="muted">Unpack into</span><select id="unpack-to" style="width:auto"><option value="">choose a bin…</option>${bins.map(x=>`<option value="${x.id}" ${x.id===unpackTo?'selected':''}>${esc(x.code)} · ${esc(x.name||'')}</option>`).join('')}</select><span class="tiny">then tap a bag's ⇢</span></div>`);
+    bar.querySelector('#unpack-to').onchange=e=>{ unpackTo=e.target.value; };
     m.append(bar);
     const l=h('<div class="list"></div>');
     for(const p of ps){ const r=partRow(p,false); const mv=h('<button class="btn sm" aria-label="Move to chosen bin" style="margin-left:8px">⇢</button>'); mv.onclick=async e=>{ e.stopPropagation(); const to=bar.querySelector('#unpack-to').value; if(!to){ toast('Choose a bin first'); return; } await writePart({...p, binId:to, box:''}); toast(`${bagStr(p.bag)||p.name} → ${S.bins.get(to)?.code}`); }; r.querySelector('.q').append(mv); l.append(r); }
