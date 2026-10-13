@@ -283,7 +283,7 @@ BOM lines (JSON): ${JSON.stringify(rows)}
 Reply with only a JSON array, same order and length as the BOM lines: [{"id": "<inventory id or null>", "confidence": 0-1}]`, {modelTier:'quick'});
       const items=rows.map((r,i)=>{ const hit=Array.isArray(res)&&res[i]&&res[i].id&&S.parts.get(res[i].id); return {...r, m: hit?{p:hit, conf:Number(res[i].confidence||0.7)}:matchPart(r.name,S.parts.values())}; });
       run(items);
-    }catch(e){ if(e.code!=='not_granted') toast('Smart matching unavailable, used plain matching'); run(); }
+    }catch(e){ if(e.code==='not_granted') toast(e.message+' Used plain matching.',4000); else toast('Smart matching unavailable, used plain matching'); run(); }
   });
   ui.querySelector('#save')?.addEventListener('click', async()=>{
     const name=prompt('Project name for this BOM:', ''); if(!name) return;
@@ -352,7 +352,7 @@ Reply with only a JSON object: {"matchId": "<inventory id if this is the same pa
         <div class="tiny">Pick the row that is what's in the bag. Existing rows keep their record and get this bag number; the count you enter next replaces the old count.</div></div>`);
       res.querySelector('.matchlist')?.parentElement?.remove(); res.append(box);
       box.querySelectorAll('[data-id]').forEach(btn=>btn.onclick=()=>openEditor(j, btn.dataset.id?S.parts.get(btn.dataset.id):null));
-    }catch(e){ st.textContent = e.code==='not_granted' ? 'Identification declined for this view.' : e.code==='rate_limited' ? 'Too many requests — wait a moment.' : 'Could not identify — fill it in by hand.'; if(e.code!=='not_granted') openEditor({name:desc}, null); }
+    }catch(e){ st.textContent = e.code==='not_granted' ? e.message : e.code==='rate_limited' ? 'Too many requests — wait a moment.' : 'Could not identify — fill it in by hand.'; if(e.code==='not_granted') toast(e.message,4000); openEditor({name:desc}, null); }
   }
   ui.querySelector('#identify')?.addEventListener('click', identify);
   // type-ahead over the inventory, no AI needed

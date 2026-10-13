@@ -449,6 +449,24 @@ for (const v of ['-5', '0', '2.5']) {
   assert.ok(await page.$('.sheet #p-bag'), 'the sheet stays open'); assert.equal((await spare()).bag, 4, 'bag ' + v + ' wasn’t saved');
 }
 await page.click('.sheet #cancel');
+
+// ---- an API key the API refuses (a stand-in for the API, and no real key): it says so, and the part can be typed in
+const aiCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+await aiCtx.route('https://api.anthropic.com/**', r => (r.request().method() === 'OPTIONS'
+  ? r.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST' } })
+  : r.fulfill({ status: 401, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }) })));
+const ai = await aiCtx.newPage();
+await ai.goto(base + '#settings');
+await ai.fill('#ai-key', 'sk-ant-not-a-real-key'); await ai.click('#ai-save');
+await ai.goto(base + '#scan'); await ai.fill('#desc', 'BME280'); await ai.click('#identify');
+await ai.waitForSelector('.sheet #p-name');
+assert.equal(await ai.textContent('#status'), 'The API key was refused. Check it in Settings.');
+assert.equal(await ai.inputValue('#p-name'), 'BME280', 'the part can still be typed in by hand');
+await ai.click('.sheet #cancel');
+await ai.goto(base + '#bom'); await ai.fill('#bom', '1 SCD41'); await ai.click('#smart');
+await ai.waitForSelector('#toast:has-text("The API key was refused")');
+await ai.waitForSelector('.bom-summary');
+await aiCtx.close();
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 
