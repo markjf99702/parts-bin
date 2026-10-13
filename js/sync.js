@@ -59,7 +59,8 @@ async function folder() { // the "Parts Bin" folder, made the first time (or aga
   return f ? f.id : (await api('POST', 'drive/v3/files?fields=id', JSON.stringify(FOLDER), 'application/json')).id;
 }
 async function download(id) {
-  const raw = await api('GET', `drive/v3/files/${id}?alt=media`);
+  // A file that isn't JSON at all is unreadable too, not a sign that Drive can't be reached.
+  const raw = await api('GET', `drive/v3/files/${id}?alt=media`).catch(e => { throw e instanceof SyntaxError ? { unreadable: true } : e; });
   if (!raw || raw.app !== APP) throw { unreadable: true };
   return cleanDoc(raw);
 }

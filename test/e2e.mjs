@@ -388,6 +388,18 @@ await laptop.page.waitForTimeout(1600);
 await page.evaluate(() => document.querySelector('#cloud-m').click());
 await page.waitForFunction(() => JSON.parse(localStorage.getItem('parts-bin')).items.parts['p-scd41'].qty === 4, null, { timeout: 8000 });
 
+// ---- a Drive file that isn't JSON at all is left alone, and the page says it can't read it (Drive itself is fine)
+const BROKEN = '{"app":"parts-bin","items":{';
+g.drive.files.fb1 = { owner: 'broken', name: 'Parts Bin', mimeType: 'application/vnd.google-apps.folder', appProperties: { partsbin: 'folder' }, version: 1, modified: Date.now(), body: null };
+g.drive.files.fb2 = { owner: 'broken', name: 'Parts Bin.json', mimeType: 'application/json', appProperties: { partsbin: 'sync' }, parents: ['fb1'], version: 1, modified: Date.now(), body: BROKEN };
+const other = await device();
+await other.page.evaluate(() => localStorage.setItem('__who', 'broken'));
+await other.page.goto(base + '#settings');
+await other.page.click('[data-a="on"]');
+await other.page.waitForFunction(() => /isn’t readable|Couldn’t reach/.test(document.querySelector('#drivecard')?.textContent), null, { timeout: 10000 });
+assert.match(await other.page.textContent('#drivecard'), /The file in your Drive isn’t readable/);
+assert.equal(g.drive.files.fb2.body, BROKEN, 'the file was left as it was');
+
 // ---- phone basics
 await page.goto(base + '#bins');
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
@@ -527,7 +539,7 @@ await off.goto(base + '#part/p-bme280'); await off.waitForSelector('h2:has-text(
 await off.evaluate(() => document.fonts.ready);
 assert.ok(await off.evaluate(() => document.fonts.check('600 24px "Barlow Condensed"') && document.fonts.check('16px Barlow')), 'the fonts came from the offline copy');
 await offCtx.setOffline(false);
-for (const p of [page, laptop.page, off]) assert.deepEqual(p.problems, [], 'problems while using it');
+for (const p of [page, laptop.page, other.page, off]) assert.deepEqual(p.problems, [], 'problems while using it');
 await browser.close();
 server.close();
 console.log('all good');
