@@ -547,6 +547,18 @@ assert.match(await page.textContent('#print-root .sub'), / · Parts Bin, /);
 await page.emulateMedia({ media: 'print' });
 assert.deepEqual(await page.evaluate(() => ['.app', '.jd-foot', '.mobile-cloud'].map(s => getComputedStyle(document.querySelector(s)).display)), ['none', 'none', 'none']);
 await page.emulateMedia({ media: 'screen' });
+
+// ---- when the clipboard says no, Copy list and Copy shopping list show the text to copy by hand
+await page.evaluate(() => { navigator.clipboard.writeText = () => Promise.reject(new DOMException('Write permission denied.', 'NotAllowedError')); });
+await page.click('.pagehead #copy');
+await page.waitForSelector('.sheet textarea');
+assert.match(await page.inputValue('.sheet textarea'), /^Moved part 03 ×1\n/);
+await page.click('.sheet #done');
+await page.goto(base + '#bom'); await page.click('#out #copy');
+await page.waitForSelector('.sheet textarea');
+assert.equal(await page.inputValue('.sheet textarea'), '0.2 × m heat shrink tubing 3mm');
+await page.click('.sheet #done');
+await page.reload(); // the pretend clipboard again
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 

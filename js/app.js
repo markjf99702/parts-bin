@@ -172,7 +172,7 @@ function renderBin(m, binId){
   head.querySelector('#add')?.addEventListener('click',()=>editPart({binId}));
   head.querySelector('#pack')?.addEventListener('click',()=>{ localSet('sr.packbox',b.id); go('scan'); });
   head.querySelector('#print').onclick=()=>printList(b,ps);
-  head.querySelector('#copy').onclick=()=>{ const txt=ps.map(p=>`${p.bag?bagStr(p.bag)+' ':''}${p.name}${p.qty!=null?' ×'+p.qty:''}`).join('\n'); navigator.clipboard?.writeText(txt).then(()=>toast('List copied — paste into Manifest')); };
+  head.querySelector('#copy').onclick=()=>copyText(ps.map(p=>`${p.bag?bagStr(p.bag)+' ':''}${p.name}${p.qty!=null?' ×'+p.qty:''}`).join('\n'),'List copied — paste into Manifest','Copy the list');
   m.append(h(`<div class="binhead"><div class="photo">${b.photo?`<img src="${assetUrl(b.photo)}" alt="">`:ICONS.box}</div><div><span class="label lg ${isBox(b)?'box':''}">${esc(b.code)}</span><h2>${esc(b.name||'')}</h2><div class="muted">${esc(b.location||'')}${b.notes?` · ${esc(b.notes)}`:''}</div><div class="tiny" style="margin-top:6px">${ps.length} ${isBox(b)?'bag':'part'}${ps.length===1?'':'s'}${b.tagWritten?' · NFC tag written':''}${b.sealed?' · sealed':''}</div></div></div>`));
   if(!ps.length){ m.append(h(`<div class="empty"><p>${isBox(b)?'Nothing packed in this box yet.':'Nothing in this bin yet.'}</p></div>`)); return; }
   if(isBox(b)&&S.canWrite){
@@ -269,7 +269,7 @@ function renderBom(m){
     }).join('');
     out.innerHTML=`<div class="bom-summary"><span class="chip ok">${have} have</span><span class="chip warn">${short} short</span><span class="chip bad">${missing} missing</span></div><div class="tablewrap"><table class="bom-table"><thead><tr><th>Need</th><th>Item</th><th>Stock</th><th>Where</th><th>Status</th></tr></thead><tbody>${trs}</tbody></table></div>
       ${missing+short?`<div class="row" style="margin-top:10px"><button class="btn sm" id="copy">Copy shopping list</button></div>`:''}`;
-    out.querySelector('#copy')?.addEventListener('click',()=>{ const txt=items.filter(r=>!r.m||Number(r.m.p.qty||0)<r.qty).map(r=>`${r.m?shortBy(r.qty,Number(r.m.p.qty||0)):r.qty} × ${r.name}`).join('\n'); navigator.clipboard?.writeText(txt).then(()=>toast('Shopping list copied')); });
+    out.querySelector('#copy')?.addEventListener('click',()=>copyText(items.filter(r=>!r.m||Number(r.m.p.qty||0)<r.qty).map(r=>`${r.m?shortBy(r.qty,Number(r.m.p.qty||0)):r.qty} × ${r.name}`).join('\n'),'Shopping list copied','Copy the shopping list'));
   }
   ui.querySelector('#check').onclick=()=>run();
   ui.querySelector('#smart')?.addEventListener('click', async()=>{
@@ -788,8 +788,12 @@ function claudeText(parts){
 async function sendToClaude(parts){
   const text=claudeText(parts);
   if(navigator.share && matchMedia('(pointer:coarse)').matches){ try{ await navigator.share({text}); return; }catch(e){ if(e.name==='AbortError') return; } }
-  try{ await navigator.clipboard.writeText(text); toast('Copied. Paste it into a chat with Claude.',3500); }
-  catch{ const {el,close}=sheet(`<h3>Copy this to Claude</h3><textarea readonly style="min-height:180px" class="mono">${esc(text)}</textarea><div class="actions"><button class="btn" id="done">Close</button></div>`); el.querySelector('#done').onclick=close; el.querySelector('textarea').select(); }
+  await copyText(text,'Copied. Paste it into a chat with Claude.','Copy this to Claude',3500);
+}
+// Copies text to the clipboard. Where the browser refuses (or has no clipboard), the text opens in a sheet, selected, to copy by hand.
+async function copyText(text, done, title, ms=1800){
+  try{ await navigator.clipboard.writeText(text); toast(done,ms); }
+  catch{ const {el,close}=sheet(`<h3>${esc(title)}</h3><textarea readonly style="min-height:180px" class="mono">${esc(text)}</textarea><div class="actions"><button class="btn" id="done">Close</button></div>`); el.querySelector('#done').onclick=close; el.querySelector('textarea').select(); }
 }
 
 // ------------------------------------------------------------------ settings
