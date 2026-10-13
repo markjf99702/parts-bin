@@ -465,6 +465,12 @@ assert.equal((await spare()).qty, 0); assert.equal(await page.inputValue('#qv'),
 await page.click('#edit'); await page.fill('#p-qty', '-3'); await page.click('.sheet #save');
 await page.waitForFunction(() => !document.querySelector('.sheet'));
 assert.equal((await spare()).qty, 0);
+// − and + on a count in metres: 1.1 m less one is 0.1 m, not 0.10000000000000009
+await page.goto(base + '#part/p-heat');
+await page.click('#inc'); await page.waitForFunction(() => JSON.parse(localStorage.getItem('parts-bin')).items.parts['p-heat'].qty === 1.1);
+await page.click('#dec'); await page.waitForFunction(() => JSON.parse(localStorage.getItem('parts-bin')).items.parts['p-heat'].qty < 1);
+assert.equal((await part('p-heat')).qty, 0.1); assert.equal(await page.inputValue('#qv'), '0.1');
+await page.goto(base + '#part/' + spareId);
 
 // ---- a bag number is a whole number from 1 up (a tag for "-5" would open no bag)
 await page.click('#edit');

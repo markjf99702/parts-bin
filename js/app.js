@@ -230,7 +230,9 @@ function renderPartPage(m, pid){
     const q=h(`<div class="row" style="margin:6px 0 14px"><label class="muted" for="qv">Quantity</label><div class="qty"><button class="btn icon" id="dec" aria-label="Use one">−</button><input id="qv" type="number" min="0" step="any" value="${esc(p.qty??0)}"><button class="btn icon" id="inc" aria-label="Add one">+</button></div><span class="tiny">${esc(p.unit||'pcs')}${p.minQty!=null&&p.minQty!==''?` · reorder at ${esc(p.minQty)}`:''}</span></div>`);
     m.append(q);
     const inp=q.querySelector('#qv'); const save=async(v)=>{ v=Math.max(0,Number(v)); if(!isFinite(v)) return; inp.value=v; if(v!==Number(p.qty||0)) await writePart({...p, qty:v}); }; // a count stops at zero
-    q.querySelector('#dec').onclick=()=>save(Number(inp.value)-1); q.querySelector('#inc').onclick=()=>save(Number(inp.value)+1);
+    // one fewer or one more, without the float's leftovers: 1.1 m less one is 0.1 m, not 0.10000000000000009
+    const step=d=>save(Number((Number(inp.value)+d).toPrecision(12)));
+    q.querySelector('#dec').onclick=()=>step(-1); q.querySelector('#inc').onclick=()=>step(1);
     inp.onchange=()=>save(inp.value);
   } else m.append(h(`<div class="muted" style="margin-bottom:12px">Quantity: ${esc(fmtQty(p))}</div>`));
   if(p.check){
