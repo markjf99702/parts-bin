@@ -500,6 +500,15 @@ await ai.goto(base + '#inbox'); await ai.waitForSelector('text=Fill in details')
 assert.equal(await ai.locator('text=Every part has some details already').count(), 0);
 await aiCtx.close();
 
+// ---- a backup saved late in the evening is named for that day, not the next one (as it is in UTC)
+const tzCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'America/New_York', acceptDownloads: true });
+const tz = await tzCtx.newPage();
+await tz.goto(base + '#settings');
+await tz.clock.setFixedTime(new Date('2026-10-14T02:30:00Z')); // 22:30 on 13 October in New York
+const [backup] = await Promise.all([tz.waitForEvent('download'), tz.click('#exp')]);
+assert.equal(backup.suggestedFilename(), 'parts-bin-2026-10-13.json');
+await tzCtx.close();
+
 // ---- every control has a name a screen reader can say, a sheet is named by its heading, and toasts are announced
 const named = async (hash, role, name) => { await page.goto(base + hash); assert.equal(await page.getByRole(role, { name, exact: true }).count(), 1, `${hash}: a ${role} called "${name}"`); };
 await named('#parts', 'searchbox', 'Search'); await named('#parts', 'combobox', 'Category');

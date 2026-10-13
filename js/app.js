@@ -815,7 +815,8 @@ function renderSettings(m){
 // ------------------------------------------------------------------ export
 function exportJson(){
   const blob=new Blob([store.backup()],{type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`parts-bin-${new Date().toISOString().slice(0,10)}.json`;
+  const d=new Date(), two=n=>String(n).padStart(2,'0'); // today where you are (toISOString is the date in UTC)
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`parts-bin-${d.getFullYear()}-${two(d.getMonth()+1)}-${two(d.getDate())}.json`;
   document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
 function importJson(){
