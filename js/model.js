@@ -8,7 +8,9 @@ export const APP = 'parts-bin';
 export const KINDS = ['bins', 'parts', 'projects'];
 
 const idOk = id => typeof id === 'string' && /^[\w.:@+~-]{1,80}$/.test(id);
-const tOk = t => (Number.isFinite(+t) && +t >= 0 ? Math.floor(+t) : 0);
+// A time is ms since 1970, up to the last one a Date can hold; anything else counts as none (0).
+const MAX_T = 8.64e15;
+const tOk = t => (Number.isFinite(+t) && +t >= 0 && +t <= MAX_T ? Math.floor(+t) : 0);
 
 export const blankDoc = () => ({ app: APP, v: 1, items: { bins: {}, parts: {}, projects: {} } });
 export const gone = x => !!(x && x.del && x.del >= (x.t || 0));

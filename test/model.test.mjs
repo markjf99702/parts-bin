@@ -44,3 +44,10 @@ test('putItem and removeItem stamp times that move forward', () => {
   d = M.putItem(d, 'parts', 'a', { name: 'X' });
   assert.ok(!M.gone(d.items.parts.a));
 });
+test('a change time no date can hold is read as none, so one bad item can’t hide the rest', () => {
+  const d = M.cleanDoc({ items: { parts: { zz: { name: 'From the file', qty: 1, t: 9e15 }, far: { name: 'Far but real', t: 8.64e15 }, ok: { name: 'BME280', t: 10 } } } });
+  assert.equal(d.items.parts.zz.t, 0);
+  assert.equal(d.items.parts.far.t, 8.64e15);
+  assert.equal(d.items.parts.ok.t, 10);
+  for (const x of M.live(d, 'parts')) assert.doesNotThrow(() => new Date(x.t).toISOString(), x.name);
+});

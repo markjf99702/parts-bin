@@ -485,6 +485,16 @@ await page.focus('.sheet #save'); await page.keyboard.press('Tab');
 assert.ok(await page.evaluate(() => !document.activeElement.closest('.app, #tabbar, .jd-foot, .mobile-cloud')), 'Tab went behind the sheet');
 await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('.sheet'));
 assert.equal(await page.evaluate(() => document.activeElement.id), 'edit', 'the keyboard is back on Edit');
+
+// ---- a file with a change time no date can hold loads, and the inventory still shows (it used to vanish)
+const farFile = join(tmp, 'far.json');
+await writeFile(farFile, JSON.stringify({ app: 'parts-bin', v: 1, items: { parts: { 'p-far': { name: 'From the far future', qty: 1, t: 9e15 } } } }));
+await page.goto(base + '#settings');
+const [chooser3] = await Promise.all([page.waitForEvent('filechooser'), page.click('#imp')]);
+await chooser3.setFiles(farFile);
+await page.waitForSelector('text=Loaded: 1 item');
+await page.goto(base + '#parts'); await page.reload();
+await page.waitForSelector('.item:has-text("BME280 (Adafruit)")'); await page.waitForSelector('.item:has-text("From the far future")');
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 

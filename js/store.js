@@ -21,9 +21,11 @@ function notify() {
   if (pending) return; pending = true;
   queueMicrotask(() => { pending = false; deliver(); });
 }
+// One item's odd time mustn't stop the rest from showing.
+const iso = t => { const d = new Date(t); return isNaN(d) ? '' : d.toISOString(); };
 function deliver() {
   for (const kind of M.KINDS) {
-    const docs = M.live(doc, kind).map(x => { const { t, del, id, ...data } = x; return { id, data: () => ({ ...data, updatedAt: new Date(t).toISOString() }) }; });
+    const docs = M.live(doc, kind).map(x => { const { t, del, id, ...data } = x; return { id, data: () => ({ ...data, updatedAt: iso(t) }) }; });
     for (const f of subs[kind]) { try { f({ docs, size: docs.length, empty: !docs.length }); } catch (e) { console.error(e); } }
   }
 }
