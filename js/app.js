@@ -844,4 +844,5 @@ window.addEventListener('storage',e=>{ if(e.key==='parts-bin') store.reload(); i
 takeLink(); // a link from Claude carries a batch for the inbox
 listen(); // starts on its own once NFC has been allowed for the site
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') listen(); });
-if('serviceWorker' in navigator && !FRAMED && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
+// offline copy (sw.js); localhost too, so the tests can check it works with no network
+if('serviceWorker' in navigator && !FRAMED && (location.protocol==='https:'||location.hostname==='localhost')) navigator.serviceWorker.register('sw.js').catch(()=>{});

@@ -52,7 +52,9 @@ const fakeNfc = () => {
 const g = fakeGoogle();
 const browser = await pw.chromium.launch();
 async function device() {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, acceptDownloads: true });
+  // No offline copy on these devices (it's checked on one of its own at the end): routes can't reach what a service worker
+  // fetches, so it would hand the page sync.js without the stand-in Drive's address.
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, acceptDownloads: true, serviceWorkers: 'block' });
   await g.install(ctx, { rewrite: { '**/js/sync.js': s => s.replace("['https://parts-bin.junkdrawer.works', 'https://junkdrawer.works']", `['https://parts-bin.junkdrawer.works', '${origin}']`) } });
   await ctx.addInitScript(fakeNfc);
   // reference photos load from wherever they're hosted; here, one that exists and one that's gone
@@ -498,8 +500,23 @@ await page.waitForSelector('.item:has-text("BME280 (Adafruit)")'); await page.wa
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 
-await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 5000 }).catch(() => {});
-for (const p of [page, laptop.page]) assert.deepEqual(p.problems, [], 'problems while using it');
+// ---- works offline once it has been opened: the inventory, the screens and the fonts, with no network at all
+const offCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+const off = await offCtx.newPage();
+off.problems = [];
+off.on('pageerror', e => off.problems.push(e.message));
+off.on('console', m => { if (m.type() === 'error') off.problems.push(m.text()); });
+await off.goto(base);
+await off.evaluate(v => localStorage.setItem('parts-bin', v), await page.evaluate(() => localStorage.getItem('parts-bin')));
+await off.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 });
+await offCtx.setOffline(true);
+await off.reload();
+await off.waitForSelector('.bin:has-text("Environmental")');
+await off.goto(base + '#part/p-bme280'); await off.waitForSelector('h2:has-text("BME280")');
+await off.evaluate(() => document.fonts.ready);
+assert.ok(await off.evaluate(() => document.fonts.check('600 24px "Barlow Condensed"') && document.fonts.check('16px Barlow')), 'the fonts came from the offline copy');
+await offCtx.setOffline(false);
+for (const p of [page, laptop.page, off]) assert.deepEqual(p.problems, [], 'problems while using it');
 await browser.close();
 server.close();
 console.log('all good');
