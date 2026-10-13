@@ -438,7 +438,7 @@ for (const hash of ['#bins', '#parts', '#settings', '#bin/bin-env']) {
 await page.evaluate(() => {
   const d = JSON.parse(localStorage.getItem('parts-bin')), t = Date.now();
   d.items.bins['box-move'] = { code: 'BOX 02', kind: 'box', name: 'Bench', location: 'Moving boxes', t };
-  for (let i = 1; i <= 12; i++) d.items.parts['p-move' + i] = { name: 'Moved part ' + String(i).padStart(2, '0'), qty: 1, unit: 'pcs', binId: 'box-move', tags: [], t };
+  for (let i = 1; i <= 16; i++) d.items.parts['p-move' + i] = { name: 'Moved part ' + String(i).padStart(2, '0'), qty: 1, unit: 'pcs', binId: 'box-move', tags: [], t };
   localStorage.setItem('parts-bin', JSON.stringify(d)); dispatchEvent(new StorageEvent('storage', { key: 'parts-bin' }));
 });
 await page.goto(base + '#bin/box-move');
@@ -448,11 +448,11 @@ await page.selectOption('#unpack-to', 'bin-env');
 await page.evaluate(() => window.scrollTo(0, 200));
 const moveButtons = () => page.locator('button[aria-label$="to the chosen bin"]');
 await moveButtons().first().click();
-await page.waitForFunction(() => document.querySelectorAll('button[aria-label$="to the chosen bin"]').length === 11);
+await page.waitForFunction(() => document.querySelectorAll('button[aria-label$="to the chosen bin"]').length === 15);
 assert.equal(await page.inputValue('#unpack-to'), 'bin-env', 'the bin picked is still picked');
 assert.equal(await page.evaluate(() => scrollY), 200, 'the page kept its place');
 await moveButtons().first().click();
-await page.waitForFunction(() => document.querySelectorAll('button[aria-label$="to the chosen bin"]').length === 10);
+await page.waitForFunction(() => document.querySelectorAll('button[aria-label$="to the chosen bin"]').length === 14);
 assert.deepEqual(await page.evaluate(() => ['p-move1', 'p-move2'].map(id => JSON.parse(localStorage.getItem('parts-bin')).items.parts[id].binId)), ['bin-env', 'bin-env']);
 
 // ---- a count stops at zero, from − or from the sheet
