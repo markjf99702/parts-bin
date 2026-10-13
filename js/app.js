@@ -224,9 +224,9 @@ function renderPartPage(m, pid){
     ${/^https?:\/\//i.test(p.link||'')?`<div class="tiny" style="margin-top:4px"><a href="${esc(p.link)}" target="_blank" rel="noopener">Product link</a></div>`:''}
   </div></div>`));
   if(S.canWrite){
-    const q=h(`<div class="row" style="margin:6px 0 14px"><span class="muted">Quantity</span><div class="qty"><button class="btn icon" id="dec" aria-label="Use one">−</button><input id="qv" type="number" step="any" value="${esc(p.qty??0)}"><button class="btn icon" id="inc" aria-label="Add one">+</button></div><span class="tiny">${esc(p.unit||'pcs')}${p.minQty!=null&&p.minQty!==''?` · reorder at ${esc(p.minQty)}`:''}</span></div>`);
+    const q=h(`<div class="row" style="margin:6px 0 14px"><span class="muted">Quantity</span><div class="qty"><button class="btn icon" id="dec" aria-label="Use one">−</button><input id="qv" type="number" min="0" step="any" value="${esc(p.qty??0)}"><button class="btn icon" id="inc" aria-label="Add one">+</button></div><span class="tiny">${esc(p.unit||'pcs')}${p.minQty!=null&&p.minQty!==''?` · reorder at ${esc(p.minQty)}`:''}</span></div>`);
     m.append(q);
-    const inp=q.querySelector('#qv'); const save=async(v)=>{ v=Number(v); if(!isFinite(v)) return; await writePart({...p, qty:v}); };
+    const inp=q.querySelector('#qv'); const save=async(v)=>{ v=Math.max(0,Number(v)); if(!isFinite(v)) return; inp.value=v; if(v!==Number(p.qty||0)) await writePart({...p, qty:v}); }; // a count stops at zero
     q.querySelector('#dec').onclick=()=>save(Number(inp.value)-1); q.querySelector('#inc').onclick=()=>save(Number(inp.value)+1);
     inp.onchange=()=>save(inp.value);
   } else m.append(h(`<div class="muted" style="margin-bottom:12px">Quantity: ${esc(fmtQty(p))}</div>`));
@@ -427,7 +427,7 @@ function editPart(p, opts={}){
     <div class="grid2">
       <div class="field"><label for="p-bin">Bin</label><select id="p-bin"><option value="">— no bin —</option>${bins.map(b=>`<option value="${b.id}" ${b.id===p.binId?'selected':''}>${esc(b.code)} · ${esc(b.name||'')}</option>`).join('')}</select></div>
       <div class="field"><label for="p-cat">Category</label><input id="p-cat" list="cats" value="${esc(p.category)}" placeholder="MCU boards"><datalist id="cats">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
-      <div class="field"><label for="p-qty">Quantity</label><div class="qty"><input id="p-qty" type="number" step="any" value="${esc(p.qty)}"><input id="p-unit" value="${esc(p.unit||'pcs')}" style="width:70px" aria-label="Unit"></div></div>
+      <div class="field"><label for="p-qty">Quantity</label><div class="qty"><input id="p-qty" type="number" min="0" step="any" value="${esc(p.qty)}"><input id="p-unit" value="${esc(p.unit||'pcs')}" style="width:70px" aria-label="Unit"></div></div>
       <div class="field"><label for="p-min">Reorder at (optional)</label><input id="p-min" type="number" step="any" value="${esc(p.minQty??'')}"></div>
       <div class="field"><label for="p-mpn">Part number</label><input id="p-mpn" class="mono" value="${esc(p.mpn)}"></div>
       <div class="field"><label for="p-bag">Bag number</label><input id="p-bag" type="number" class="mono" value="${esc(p.bag??'')}" placeholder="${nextBag()}"></div>
@@ -464,7 +464,7 @@ function editPart(p, opts={}){
     if(bag!=='' && [...S.parts.values()].some(x=>x.id!==p.id && Number(x.bag)===bag)){ toast(`Bag ${bagStr(bag)} is already used`); return; }
     const imgv=el.querySelector('#p-img').value.trim(), img=IN.httpsUrl(imgv);
     if(imgv && !img){ toast('The photo link needs to start with https://',3000); return; }
-    const doc={...p, name, bag, from, binId:newBin, category:el.querySelector('#p-cat').value.trim(), qty:Number(el.querySelector('#p-qty').value)||0, unit:el.querySelector('#p-unit').value.trim()||'pcs',
+    const doc={...p, name, bag, from, binId:newBin, category:el.querySelector('#p-cat').value.trim(), qty:Math.max(0,Number(el.querySelector('#p-qty').value)||0), unit:el.querySelector('#p-unit').value.trim()||'pcs',
       minQty:el.querySelector('#p-min').value===''?'':Number(el.querySelector('#p-min').value), mpn:el.querySelector('#p-mpn').value.trim(), tags:el.querySelector('#p-tags').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),
       link:el.querySelector('#p-link').value.trim(), notes:el.querySelector('#p-notes').value.trim(), updatedAt:new Date().toISOString(),
       iface:IN.ifaces(el.querySelector('#p-iface').value), addr:el.querySelector('#p-addr').value.trim(), volts:el.querySelector('#p-volts').value.trim(), logic:el.querySelector('#p-logic').value.trim(), img, check:el.querySelector('#p-check').value.trim()};

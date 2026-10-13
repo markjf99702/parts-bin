@@ -425,6 +425,17 @@ assert.equal(await page.evaluate(() => scrollY), 200, 'the page kept its place')
 await moveButtons().first().click();
 await page.waitForFunction(() => document.querySelectorAll('button[aria-label="Move to chosen bin"]').length === 10);
 assert.deepEqual(await page.evaluate(() => ['p-move1', 'p-move2'].map(id => JSON.parse(localStorage.getItem('parts-bin')).items.parts[id].binId)), ['bin-env', 'bin-env']);
+
+// ---- a count stops at zero, from − or from the sheet
+await page.goto(base + '#part/' + spareId);
+assert.equal((await spare()).qty, 1);
+await page.click('#dec');
+await page.waitForFunction(id => JSON.parse(localStorage.getItem('parts-bin')).items.parts[id].qty === 0, spareId);
+await page.click('#dec'); await page.waitForTimeout(200);
+assert.equal((await spare()).qty, 0); assert.equal(await page.inputValue('#qv'), '0');
+await page.click('#edit'); await page.fill('#p-qty', '-3'); await page.click('.sheet #save');
+await page.waitForFunction(() => !document.querySelector('.sheet'));
+assert.equal((await spare()).qty, 0);
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 
