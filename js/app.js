@@ -189,7 +189,7 @@ function renderBin(m, binId){
 }
 function printList(b, ps){
   const root=document.getElementById('print-root');
-  root.innerHTML=`<h1>${esc(b.code)} — ${esc(b.name||'')}</h1><div class="sub">${esc(b.location||'')} · ${ps.length} item${ps.length===1?'':'s'} · Stockroom, ${new Date().toLocaleDateString()}</div>
+  root.innerHTML=`<h1>${esc(b.code)} — ${esc(b.name||'')}</h1><div class="sub">${esc(b.location||'')} · ${ps.length} item${ps.length===1?'':'s'} · Parts Bin, ${new Date().toLocaleDateString()}</div>
     <table><thead><tr><th>Bag</th><th>Item</th><th>Qty</th><th>From</th><th>Notes</th></tr></thead><tbody>${ps.slice().sort((a,c)=>(a.bag||9999)-(c.bag||9999)).map(p=>`<tr><td class="n">${esc(bagStr(p.bag))}</td><td>${esc(p.name)}${p.mpn?` <small>${esc(p.mpn)}</small>`:''}</td><td class="n">${esc(fmtQty(p))}</td><td>${esc(p.from||'')}</td><td>${esc((p.notes||'').split(' · ')[0])}</td></tr>`).join('')}</tbody></table>`;
   window.print();
 }

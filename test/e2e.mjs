@@ -520,6 +520,14 @@ await page.waitForSelector('.item:has-text("BME280 (Adafruit)")'); await page.wa
 const big = async sel => { const b = await page.locator(sel).first().boundingBox(); assert.ok(b.width >= 44 && b.height >= 44, `${sel} is ${b.width}×${b.height}`); };
 await page.goto(base + '#part/p-bme280'); await big('#dec'); await big('#inc');
 await page.goto(base + '#bin/box-move'); await big('button[aria-label$="to the chosen bin"]');
+
+// ---- a box's printed packing list says Parts Bin, and the site's footer and Drive button stay off the paper
+await page.evaluate(() => { window.print = () => {}; });
+await page.click('#print');
+assert.match(await page.textContent('#print-root .sub'), / · Parts Bin, /);
+await page.emulateMedia({ media: 'print' });
+assert.deepEqual(await page.evaluate(() => ['.app', '.jd-foot', '.mobile-cloud'].map(s => getComputedStyle(document.querySelector(s)).display)), ['none', 'none', 'none']);
+await page.emulateMedia({ media: 'screen' });
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 

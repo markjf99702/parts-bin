@@ -178,7 +178,7 @@ a{color:var(--accent-ink)}
 #print-root{display:none}
 @media print{
   body{background:#fff;color:#000}
-  .app,.tabbar,.toast,#sheet-root{display:none!important}
+  .app,.tabbar,.toast,#sheet-root,.jd-foot,.mobile-cloud{display:none!important}
   #print-root{display:block;font:12pt/1.4 "IBM Plex Sans","Barlow",system-ui,sans-serif;padding:0}
   #print-root h1{font:700 26pt "Barlow Condensed",sans-serif;margin:0 0 4pt}
   #print-root .sub{color:#444;margin-bottom:12pt}
