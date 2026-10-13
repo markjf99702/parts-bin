@@ -373,15 +373,19 @@ Reply with only a JSON object: {"matchId": "<inventory id if this is the same pa
 // ------------------------------------------------------------------ sheets
 function picked(el,pid){ return el.querySelector('#'+pid+'-cam')?.files?.[0] || el.querySelector('#'+pid+'-pick')?.files?.[0] || null; }
 function wirePhoto(el){ for(const pid of ['f','p']) for(const k of ['cam','pick']){ const inp=el.querySelector('#'+pid+'-'+k); if(!inp) continue; inp.onchange=()=>{ const f=inp.files[0]; const other=el.querySelector('#'+pid+'-'+(k==='cam'?'pick':'cam')); if(other) other.value=''; const pv=el.querySelector('#'+pid+'-prev'); if(f&&pv){ pv.src=URL.createObjectURL(f); pv.hidden=false; } }; } }
+// While a sheet is open the page behind it is inert, so the keyboard stays in the sheet. Closing it hands the keyboard back
+// to whatever opened it.
+const BEHIND='.app,.mobile-cloud,#tabbar,.jd-foot';
 function sheet(html){
   const root=document.getElementById('sheet-root'); root.innerHTML='';
+  const opener=document.activeElement;
   const bg=h(`<div class="sheet-bg"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`);
   bg.addEventListener('click',e=>{ if(e.target===bg) close(); });
   const onKey=e=>{ if(e.key==='Escape') close(); };
   document.addEventListener('keydown',onKey);
-  function close(){ root.innerHTML=''; document.removeEventListener('keydown',onKey); }
+  function close(){ root.innerHTML=''; document.removeEventListener('keydown',onKey); document.querySelectorAll(BEHIND).forEach(e=>e.inert=false); if(opener!==document.body && opener?.isConnected) opener.focus({preventScroll:true}); }
   const title=bg.querySelector('.sheet h3'); if(title){ title.id='sheet-title'; bg.firstElementChild.setAttribute('aria-labelledby','sheet-title'); }
-  root.append(bg); wirePhoto(bg); const f=bg.querySelector('input:not([type=file]),textarea,select'); f&&f.focus();
+  root.append(bg); document.querySelectorAll(BEHIND).forEach(e=>e.inert=true); wirePhoto(bg); const f=bg.querySelector('input:not([type=file]),textarea,select'); f&&f.focus();
   return {el:bg.querySelector('.sheet'), close};
 }
 function editBin(b){

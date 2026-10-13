@@ -477,6 +477,12 @@ await page.click('#edit');
 assert.equal(await page.getByRole('dialog', { name: 'Edit part' }).count(), 1);
 await page.click('.sheet #save');
 await page.waitForFunction(() => document.querySelector('[role="status"]')?.textContent === 'Saved');
+// a sheet keeps the keyboard while it's open, and hands it back to the button that opened it
+await page.focus('#edit'); await page.keyboard.press('Enter'); await page.waitForSelector('.sheet #save');
+await page.focus('.sheet #save'); await page.keyboard.press('Tab');
+assert.ok(await page.evaluate(() => !document.activeElement.closest('.app, #tabbar, .jd-foot, .mobile-cloud')), 'Tab went behind the sheet');
+await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('.sheet'));
+assert.equal(await page.evaluate(() => document.activeElement.id), 'edit', 'the keyboard is back on Edit');
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 
