@@ -430,7 +430,7 @@ function editPart(p, opts={}){
       <div class="field"><label for="p-qty">Quantity</label><div class="qty"><input id="p-qty" type="number" min="0" step="any" value="${esc(p.qty)}"><input id="p-unit" value="${esc(p.unit||'pcs')}" style="width:70px" aria-label="Unit"></div></div>
       <div class="field"><label for="p-min">Reorder at (optional)</label><input id="p-min" type="number" step="any" value="${esc(p.minQty??'')}"></div>
       <div class="field"><label for="p-mpn">Part number</label><input id="p-mpn" class="mono" value="${esc(p.mpn)}"></div>
-      <div class="field"><label for="p-bag">Bag number</label><input id="p-bag" type="number" class="mono" value="${esc(p.bag??'')}" placeholder="${nextBag()}"></div>
+      <div class="field"><label for="p-bag">Bag number</label><input id="p-bag" type="number" min="1" step="1" class="mono" value="${esc(p.bag??'')}" placeholder="${nextBag()}"></div>
       <div class="field"><label for="p-tags">Tags (comma separated)</label><input id="p-tags" value="${esc((p.tags||[]).join(', '))}"></div>
     </div>
     <div class="field"><label for="p-link">Link</label><input id="p-link" type="url" value="${esc(p.link||'')}" placeholder="https://"></div>
@@ -461,6 +461,7 @@ function editPart(p, opts={}){
     const newBin=el.querySelector('#p-bin').value; const oldB=binOf(p), nb=S.bins.get(newBin);
     const from = (oldB && !isBox(oldB) && isBox(nb)) ? oldB.code : (p.from||'');
     const bagv=el.querySelector('#p-bag').value; const bag = bagv===''?'':Number(bagv);
+    if(bag!=='' && !(Number.isSafeInteger(bag) && bag>=1)){ toast('Bag numbers are whole numbers from 1 up',3000); return; } // a tag for bag -5 or 2.5 couldn't open it
     if(bag!=='' && [...S.parts.values()].some(x=>x.id!==p.id && Number(x.bag)===bag)){ toast(`Bag ${bagStr(bag)} is already used`); return; }
     const imgv=el.querySelector('#p-img').value.trim(), img=IN.httpsUrl(imgv);
     if(imgv && !img){ toast('The photo link needs to start with https://',3000); return; }

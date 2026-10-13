@@ -436,6 +436,16 @@ assert.equal((await spare()).qty, 0); assert.equal(await page.inputValue('#qv'),
 await page.click('#edit'); await page.fill('#p-qty', '-3'); await page.click('.sheet #save');
 await page.waitForFunction(() => !document.querySelector('.sheet'));
 assert.equal((await spare()).qty, 0);
+
+// ---- a bag number is a whole number from 1 up (a tag for "-5" would open no bag)
+await page.click('#edit');
+for (const v of ['-5', '0', '2.5']) {
+  await page.evaluate(() => { document.getElementById('toast').hidden = true; });
+  await page.fill('#p-bag', v); await page.click('.sheet #save');
+  await page.waitForSelector('#toast:has-text("whole number")');
+  assert.ok(await page.$('.sheet #p-bag'), 'the sheet stays open'); assert.equal((await spare()).bag, 4, 'bag ' + v + ' wasn’t saved');
+}
+await page.click('.sheet #cancel');
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 
