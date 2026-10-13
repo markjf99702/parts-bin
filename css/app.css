@@ -36,6 +36,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 input,select,textarea{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;width:100%}
 input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 textarea{min-height:120px;resize:vertical}
+select{max-width:100%}
 a{color:var(--accent-ink)}
 [hidden]{display:none!important}
 
@@ -58,7 +59,7 @@ a{color:var(--accent-ink)}
 .search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--ink3)}
 .tabbar{display:none}
 @media(max-width:760px){
-  .app{grid-template-columns:1fr}
+  .app{grid-template-columns:minmax(0,1fr)}
   .side{display:none}
   .main{padding:14px 16px 96px}
   .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));z-index:5}
@@ -114,7 +115,7 @@ a{color:var(--accent-ink)}
 .item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 14px;border-bottom:1px solid var(--line);align-items:center;background:none;border-left:0;border-right:0;border-top:0;text-align:left;width:100%;color:inherit}
 .item:last-child{border-bottom:0}
 .item:hover{background:var(--panel2)}
-.item .t{font-weight:600}
+.item .t{font-weight:600;overflow-wrap:anywhere}
 .item .s{font-size:12.5px;color:var(--ink3);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .item .q{font-family:"JetBrains Mono",monospace;font-weight:600;font-size:14px;text-align:right;font-variant-numeric:tabular-nums}
 .item .q small{display:block;font-size:11px;color:var(--ink3);font-weight:400}
@@ -136,10 +137,10 @@ a{color:var(--accent-ink)}
 
 /* ---- bin page ---- */
 .binhead{display:grid;grid-template-columns:120px minmax(0,1fr);gap:16px;align-items:start;margin-bottom:16px}
-@media(max-width:480px){.binhead{grid-template-columns:90px 1fr}}
+@media(max-width:480px){.binhead{grid-template-columns:90px minmax(0,1fr)}}
 .binhead .photo{aspect-ratio:1;background:var(--panel2);border-radius:var(--r);overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--ink3);border:1px solid var(--line)}
 .binhead .photo img{width:100%;height:100%;object-fit:cover}
-.binhead h2{font-size:24px;margin:6px 0 2px}
+.binhead h2{font-size:24px;margin:6px 0 2px;overflow-wrap:anywhere}
 
 /* ---- BOM ---- */
 .bom-table{width:100%;border-collapse:collapse;font-size:14px}

@@ -371,7 +371,17 @@ assert.ok(await clear('#edit'), 'the Drive button covers Edit on a part page');
 await page.goto(base + '#bin/bin-env');
 await page.waitForSelector('#add');
 assert.ok(await clear('#add'), 'the Drive button covers a button on a bin page');
-for (const hash of ['#scan', '#inbox', '#parts', '#part/p-scd41']) { await page.goto(base + hash); await page.waitForTimeout(150); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, hash + ' scrolls sideways on a phone'); }
+// long names wrap rather than push the page sideways: a bin named in full (listed in a box's Unpack into), a saved BOM, a
+// part name with no spaces
+await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem('parts-bin')), t = Date.now();
+  d.items.bins['bin-long'] = { code: 'PWR', name: 'Power, regulators, buck and boost converters', location: 'Rack A, shelf 2', t };
+  d.items.bins['box-long'] = { code: 'BOX 01', kind: 'box', name: 'Workroom — sensors, boards and the bench supplies', location: 'Moving boxes', t };
+  d.items.parts['p-long'] = { name: 'Breakout-board-whose-name-goes-on-and-on-without-a-single-space', qty: 1, unit: 'pcs', binId: 'box-long', tags: [], t };
+  d.items.projects['proj-long'] = { name: 'Workshop air quality monitor with e-ink display (v2)', text: '1 SCD41', t };
+  localStorage.setItem('parts-bin', JSON.stringify(d)); dispatchEvent(new StorageEvent('storage', { key: 'parts-bin' }));
+});
+for (const hash of ['#scan', '#inbox', '#parts', '#part/p-scd41', '#bins', '#bin/box-long', '#bom', '#part/p-long']) { await page.goto(base + hash); await page.waitForTimeout(150); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, hash + ' scrolls sideways on a phone'); }
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 
