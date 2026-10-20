@@ -185,7 +185,7 @@ function renderBin(m, binId){
     bar.querySelector('#unpack-to').onchange=e=>{ unpackTo=e.target.value; };
     m.append(bar);
     const l=h('<div class="list"></div>');
-    for(const p of ps){ const row=h('<div class="unpack"></div>'), mv=h(`<button type="button" class="btn sm" aria-label="Move ${esc(bagStr(p.bag)||p.name)} to the chosen bin">⇢</button>`); mv.onclick=async()=>{ const to=bar.querySelector('#unpack-to').value; if(!to){ toast('Choose a bin first'); return; } await writePart({...p, binId:to, box:''}); toast(`${bagStr(p.bag)||p.name} → ${S.bins.get(to)?.code}`); }; row.append(partRow(p,false), mv); l.append(row); } // the ⇢ beside the row's button, not inside it
+    for(const p of ps){ const row=h('<div class="unpack"></div>'), mv=h(`<button type="button" class="btn sm" aria-label="Move ${esc(bagStr(p.bag)||p.name)} to the chosen bin">⇢</button>`); mv.onclick=async()=>{ const to=bar.querySelector('#unpack-to').value; if(!to){ toast('Choose a bin first'); return; } if(await writePart({...p, binId:to, box:''})) toast(`${bagStr(p.bag)||p.name} → ${S.bins.get(to)?.code}`); }; row.append(partRow(p,false), mv); l.append(row); } // the ⇢ beside the row's button, not inside it
     m.append(l); return;
   }
   const l=h('<div class="list"></div>'); for(const p of ps) l.append(partRow(p,false)); m.append(l);
@@ -229,7 +229,7 @@ function renderPartPage(m, pid){
   if(S.canWrite){
     const q=h(`<div class="row" style="margin:6px 0 14px"><label class="muted" for="qv">Quantity</label><div class="qty"><button class="btn icon" id="dec" aria-label="Use one">−</button><input id="qv" type="number" min="0" step="any" value="${esc(p.qty??0)}"><button class="btn icon" id="inc" aria-label="Add one">+</button></div><span class="tiny">${esc(p.unit||'pcs')}${p.minQty!=null&&p.minQty!==''?` · reorder at ${esc(p.minQty)}`:''}</span></div>`);
     m.append(q);
-    const inp=q.querySelector('#qv'); const save=async(v)=>{ v=Math.max(0,Number(v)); if(!isFinite(v)) return; inp.value=v; if(v!==Number(p.qty||0)) await writePart({...p, qty:v}); }; // a count stops at zero
+    const inp=q.querySelector('#qv'); const save=async(v)=>{ v=Math.max(0,Number(v)); if(!isFinite(v)) return; inp.value=v; if(v!==Number(p.qty||0) && !await writePart({...p, qty:v})) inp.value=p.qty??0; }; // a count stops at zero; a refused one goes back
     // one fewer or one more, without the float's leftovers: 1.1 m less one is 0.1 m, not 0.10000000000000009
     const step=d=>save(Number((Number(inp.value)+d).toPrecision(12)));
     q.querySelector('#dec').onclick=()=>step(-1); q.querySelector('#inc').onclick=()=>step(1);
@@ -292,7 +292,7 @@ Reply with only a JSON array, same order and length as the BOM lines: [{"id": "<
   });
   ui.querySelector('#save')?.addEventListener('click', async()=>{
     const name=prompt('Project name for this BOM:', ''); if(!name) return;
-    const pid=id(); await S.db.doc('projects/'+pid).set({name, text:ta.value, updatedAt:new Date().toISOString()}); toast('Saved');
+    const pid=id(); try{ await S.db.doc('projects/'+pid).set({name, text:ta.value, updatedAt:new Date().toISOString()}); toast('Saved'); }catch(e){ writeFail(e); }
   });
   if(last) run();
 }
@@ -407,7 +407,7 @@ function editBin(b){
     ${S.assets?`<div class="field"><label>Photo</label><div class="row"><label class="btn sm" for="f-cam">${ICONS.camera} Take photo<input id="f-cam" type="file" accept="image/*" capture="environment" class="sr"></label><label class="btn sm" for="f-pick">Choose photo<input id="f-pick" type="file" accept="image/*" class="sr"></label><img id="f-prev" alt="" style="height:40px;border-radius:4px" hidden></div></div>`:''}
     <div class="actions">${!isNew?'<button class="btn danger left" id="del">Delete bin</button>':''}<button class="btn" id="cancel">Cancel</button><button class="btn primary" id="save">Save</button></div>`);
   el.querySelector('#cancel').onclick=close;
-  el.querySelector('#del')?.addEventListener('click', async()=>{ const n=partsInBin(b.id).length; if(!confirm(n?`Delete this bin? Its ${n} part(s) will be left without a bin.`:'Delete this bin?')) return; await S.db.doc('bins/'+b.id).delete(); for(const p of partsInBin(b.id)) await S.db.doc('parts/'+p.id).update({binId:''}); close(); go('bins'); });
+  el.querySelector('#del')?.addEventListener('click', async()=>{ const n=partsInBin(b.id).length; if(!confirm(n?`Delete this bin? Its ${n} part(s) will be left without a bin.`:'Delete this bin?')) return; try{ await S.db.doc('bins/'+b.id).delete(); for(const p of partsInBin(b.id)) await S.db.doc('parts/'+p.id).update({binId:''}); }catch(e){ writeFail(e); return; } close(); go('bins'); });
   el.querySelector('#save').onclick=async()=>{
     const code=el.querySelector('#f-code').value.trim(); if(!code){ toast('Label code is required'); return; }
     const dup=[...S.bins.values()].find(x=>x.code.toLowerCase()===code.toLowerCase()&&x.id!==b.id); if(dup){ toast(`Code ${code} already used`); return; }
@@ -465,7 +465,7 @@ function editPart(p, opts={}){
   let filled='';
   const syncTag=()=>{ if(dotag.checked && bagIn.value==='') bagIn.value=filled=String(p.bag||nextBag()); else if(!dotag.checked && !p.bag && filled && bagIn.value===filled){ bagIn.value=''; filled=''; } show.textContent=bagStr(Number(bagIn.value)||nextBag()); saveBtn.textContent=dotag.checked&&NFC_OK&&!FRAMED?'Save & tag':'Save'; el.querySelector('.bagtag').classList.toggle('on',dotag.checked); };
   dotag.onchange=syncTag; bagIn.oninput=syncTag; syncTag();
-  el.querySelector('#del')?.addEventListener('click', async()=>{ if(!confirm('Delete this part?')) return; await S.db.doc('parts/'+p.id).delete(); close(); go('parts'); });
+  el.querySelector('#del')?.addEventListener('click', async()=>{ if(!confirm('Delete this part?')) return; try{ await S.db.doc('parts/'+p.id).delete(); }catch(e){ writeFail(e); return; } close(); go('parts'); });
   el.querySelector('#save').onclick=async()=>{
     const name=el.querySelector('#p-name').value.trim(); if(!name){ toast('Name is required'); return; }
     const newBin=el.querySelector('#p-bin').value; const oldB=binOf(p), nb=S.bins.get(newBin);
@@ -486,7 +486,7 @@ function editPart(p, opts={}){
     try{ await S.db.doc('parts/'+p.id).set(doc); close(); if(!tagNow) toast(isNew?'Part added':'Saved'); opts.afterSave?.({...doc,id:p.id}); if(tagNow) tagSheet({...doc,id:p.id},'part',{auto:true}); }catch(e){ writeFail(e); }
   };
 }
-async function writePart(p){ const d={...p}; delete d.id; d.updatedAt=new Date().toISOString(); try{ await S.db.doc('parts/'+p.id).set(d); }catch(e){ writeFail(e); } }
+async function writePart(p){ const d={...p}; delete d.id; d.updatedAt=new Date().toISOString(); try{ await S.db.doc('parts/'+p.id).set(d); return true; }catch(e){ writeFail(e); return false; } }
 function writeFail(e){ if(e&&e.code==='invalid_argument'){ S.canWrite=false; toast('This view is read-only'); render(); } else if(e&&e.code==='quota_exceeded') toast('Storage is full — delete something first',3000); else toast('Save failed — try again'); }
 async function shrink(file){
   try{ const bmp=await createImageBitmap(file); const max=1280; const s=Math.min(1,max/Math.max(bmp.width,bmp.height)); const c=document.createElement('canvas'); c.width=Math.round(bmp.width*s); c.height=Math.round(bmp.height*s); c.getContext('2d').drawImage(bmp,0,0,c.width,c.height); return await new Promise(r=>c.toBlob(b=>r(b||file),'image/jpeg',.82)); }catch{ return file; }
@@ -511,8 +511,8 @@ function tagSheet(b, kind='bin', opts={}){
   // The number was free when the sheet opened. If another part has taken it since (another tab, a sync), stop here
   // rather than put two bags on one number.
   const taken=()=>{ if(!newBag || ![...S.parts.values()].some(x=>x.id!==b.id && Number(x.bag)===newBag)) return false; finish(); toast(`Bag ${bagStr(newBag)} has just been used. Tap Bag tag again for the next number.`,4000); return true; };
-  const claim=()=>{ if(taken()) return false; if(newBag) S.db.doc('parts/'+b.id).update({bag:newBag}).catch(()=>{}); return true; };
-  el.querySelector('#copy').onclick=()=>{ if(!claim()) return; navigator.clipboard?.writeText(url).then(()=>toast('Link copied'),()=>toast(url,4000)); };
+  const claim=async()=>{ if(taken()) return false; if(!newBag) return true; try{ await S.db.doc('parts/'+b.id).update({bag:newBag}); }catch(e){ if(e?.code!=='invalid_argument'){ writeFail(e); return false; } } return true; };
+  el.querySelector('#copy').onclick=async()=>{ if(!await claim()) return; navigator.clipboard?.writeText(url).then(()=>toast('Link copied'),()=>toast(url,4000)); };
   const st=el.querySelector('#t-status'), tz=el.querySelector('#tz');
   async function write(overwrite=false){
     if(taken()) return;
@@ -523,9 +523,9 @@ function tagSheet(b, kind='bin', opts={}){
       lastWrite=Date.now();
       try{ navigator.vibrate?.(70); }catch{}
       tz.className='tagzone ok'; st.textContent=`${label} tag written.`;
-      await S.db.doc((kind==='part'?'parts/':'bins/')+b.id).update(newBag?{tagWritten:true, bag:newBag}:{tagWritten:true}).catch(()=>{});
+      const kept=await S.db.doc((kind==='part'?'parts/':'bins/')+b.id).update(newBag?{tagWritten:true, bag:newBag}:{tagWritten:true}).then(()=>true, e=>{ if(e?.code!=='invalid_argument') writeFail(e); return false; });
       el.querySelector('#done').textContent = kind==='part' ? 'Next bag' : 'Done';
-      setTimeout(()=>{ if(el.isConnected) close(); if(newBag) toast(`${label} tagged. Write ${label} on the bag.`,3500); else toast(`${label} tagged`); }, 900);
+      setTimeout(()=>{ if(el.isConnected) close(); if(!kept) return; if(newBag) toast(`${label} tagged. Write ${label} on the bag.`,3500); else toast(`${label} tagged`); }, 900);
     }catch(e){
       if(e.name==='AbortError') return;
       try{ navigator.vibrate?.([40,60,40]); }catch{}
@@ -769,8 +769,9 @@ function updateCard(b,x){
   return el;
 }
 // keys: which fields to take from a suggestion; null takes them all. Two suggestions for one part build on each
-// other, and each part is written once.
-function applyUpdates(b, list){
+// other, and each part is written once. The suggestions leave the Inbox once they're saved; a save refused (storage
+// full) leaves them waiting.
+async function applyUpdates(b, list){
   const now=new Map(), changes=new Map();
   for(const {x,keys} of list){
     const p=now.get(x.id)||S.parts.get(x.id); if(!p) continue;
@@ -778,9 +779,11 @@ function applyUpdates(b, list){
     if(!Object.keys(data).length) continue;
     now.set(x.id,{...p,...data}); changes.set(x.id,{...changes.get(x.id),...data});
   }
-  const writes=[...changes].map(([pid,data])=>S.db.doc('parts/'+pid).update(data)), parts=writes.length;
+  try{ for(const [pid,data] of changes) await S.db.doc('parts/'+pid).update(data); }
+  catch(e){ writeFail(e); render(); return; }
+  const parts=changes.size;
   IN.resolve(INBOX,b.id,list.map(q=>q.x.k)); keepInbox();
-  Promise.all(writes).then(()=>toast(parts?`Updated ${parts} part${parts===1?'':'s'}`:'Nothing applied'), writeFail);
+  toast(parts?`Updated ${parts} part${parts===1?'':'s'}`:'Nothing applied');
   render();
 }
 // Hands Claude the parts to look up. On a phone this opens the share sheet (pick Claude); elsewhere it copies.
@@ -845,7 +848,7 @@ localDb.collection('bins').onSnapshot(snap=>{ S.bins=new Map(snap.docs.map(d=>[d
 localDb.collection('parts').onSnapshot(snap=>{ S.parts=new Map(snap.docs.map(d=>[d.id,{id:d.id,...d.data()}])); if(S.loaded) render(); else if(++got>=2){ S.loaded=true; render(); } });
 localDb.collection('projects').onSnapshot(snap=>{ S.projects=new Map(snap.docs.map(d=>[d.id,{id:d.id,...d.data()}])); if(S.loaded&&S.route.view==='bom') render(); });
 render();
-store.onSave(r=>{ if(r==='full') toast('This browser’s storage is full',4000); else drive.changed(); });
+store.onSave(()=>drive.changed()); // a change that couldn't be kept is refused where it was made (writeFail)
 drive.onUpdate(()=>store.reload());
 drive.chip(document.getElementById('cloud')); drive.chip(document.getElementById('cloud-m'));
 window.addEventListener('storage',e=>{ if(e.key==='parts-bin') store.reload(); if(e.key===IN.KEY){ INBOX=IN.loadInbox(); render(); } });

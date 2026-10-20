@@ -497,6 +497,47 @@ for (const v of ['-5', '0', '2.5']) {
 }
 await page.click('.sheet #cancel');
 
+// ---- with this browser's storage full, a save is refused and says so (it used to say "Saved", and the change was gone
+// after a reload): a sheet stays open with its edits, and nothing on screen shows what wasn't kept
+const storageFull = on => page.evaluate(on => {
+  if (!on) { Storage.prototype.setItem = window.__setItem; return; }
+  window.__setItem = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (k, v) { if (k === 'parts-bin') throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); return window.__setItem.call(this, k, v); };
+}, on);
+const stored = () => page.evaluate(() => localStorage.getItem('parts-bin'));
+const noToast = () => page.evaluate(() => { document.getElementById('toast').hidden = true; });
+const FULL = '#toast:has-text("Storage is full — delete something first")';
+await page.goto(base + '#part/p-scd41'); await page.waitForSelector('#edit');
+await storageFull(true);
+const kept = await stored(), { qty: scdQty, notes: scdNotes } = await part('p-scd41');
+await noToast(); await page.click('#edit'); await page.fill('#p-notes', 'A note there’s no room for'); await page.click('.sheet #save');
+await page.waitForSelector(FULL); await page.waitForTimeout(300);
+assert.equal(await page.textContent('#toast'), 'Storage is full — delete something first', 'it said Saved after all');
+assert.equal(await page.inputValue('.sheet #p-notes'), 'A note there’s no room for', 'the sheet stays open with the edit');
+// deleting is a save too (the part is kept, marked deleted, so other devices hear of it)
+await noToast(); page.once('dialog', d => d.accept()); await page.click('.sheet #del');
+await page.waitForSelector(FULL); assert.ok(await page.$('.sheet #p-name'), 'the sheet stays open after a refused delete');
+await page.click('.sheet #cancel');
+// + on the count goes back to what's kept
+await noToast(); await page.click('#inc'); await page.waitForSelector(FULL);
+assert.equal(await page.inputValue('#qv'), String(scdQty));
+// Save as project
+await page.goto(base + '#bom'); await page.waitForSelector('#save');
+await noToast(); page.once('dialog', d => d.accept('No room')); await page.click('#save'); await page.waitForSelector(FULL);
+// suggestions from the Inbox stay waiting until they can be saved
+await page.goto(base + '#inbox');
+await page.fill('#inb-paste', await IN.encode({ partsbin: 1, batch: { id: 'ptest-full', source: 'details', items: [{ id: 'p-bme280', volts: '1.71–3.6 V' }] } }));
+await page.click('#inb-go'); await page.waitForSelector('[data-a="apply"]');
+await noToast(); await page.click('[data-a="apply"]'); await page.waitForSelector(FULL);
+assert.equal(await page.locator('.card.inb').count(), 1, 'the suggestion is still waiting');
+assert.equal(await stored(), kept, 'nothing was written');
+await storageFull(false);
+page.once('dialog', d => d.accept()); await page.click('[data-a="drop"]'); await page.waitForSelector('text=Nothing waiting');
+await page.goto(base + '#part/p-scd41'); await page.reload(); await page.waitForSelector('h2:has-text("SCD41")');
+assert.equal((await part('p-scd41')).notes, scdNotes);
+assert.equal((await part('p-scd41')).qty, scdQty);
+assert.ok(!Object.values(JSON.parse(await stored()).items.projects).some(p => p.name === 'No room'));
+
 // ---- an API key the API refuses (a stand-in for the API, and no real key): it says so, and the part can be typed in
 const aiCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
 await aiCtx.route('https://api.anthropic.com/**', r => (r.request().method() === 'OPTIONS'

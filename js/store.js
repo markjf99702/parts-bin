@@ -10,11 +10,15 @@ let doc = M.cleanDoc(get(KEY));
 const subs = { bins: [], parts: [], projects: [] };
 const saved = [];
 
+// A change this browser can't keep (its storage is full) is refused, and nothing changes: the screens only ever show
+// what's really saved, and set(), update() and delete() reject so the page can say so.
+const full = e => !!e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014);
 function write(next) {
+  try { localStorage.setItem(KEY, M.canon(next)); }
+  catch (e) { throw full(e) ? { code: 'quota_exceeded', message: 'Storage is full — delete something first' } : { code: 'unavailable', message: 'Save failed — try again' }; }
   doc = next;
-  try { localStorage.setItem(KEY, M.canon(doc)); } catch { saved.forEach(f => f('full')); }
   notify();
-  saved.forEach(f => f('saved'));
+  saved.forEach(f => f());
 }
 let pending = false;
 function notify() {
@@ -61,7 +65,7 @@ export const db = {
 
 export const store = {
   get doc() { return doc; },
-  onSave(f) { saved.push(f); },
+  onSave(f) { saved.push(f); }, // after each change that was kept
   reload() { doc = M.cleanDoc(get(KEY)); notify(); },
   backup: () => JSON.stringify({ ...JSON.parse(M.canon(doc)), saved: new Date().toISOString() }, null, 1),
   // Merges a file in item by item, so nothing here is lost. Returns how many items it added or changed.
