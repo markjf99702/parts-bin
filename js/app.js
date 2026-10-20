@@ -34,7 +34,7 @@ function parseHash(){ const h=location.hash.replace(/^#\/?/,''); const [view,...
 // it goes to the page the sheet was on. While Parts Bin is stepping back off a closed sheet, the page opens once that lands.
 function go(view,arg){
   const u = arg ? `#${view}/${arg}` : `#${view}`;
-  if(stepping) nextPage=u; else if(!openSheet && history.state?.sheet) location.replace(u); else location.hash=u;
+  if(isStepping()) nextPage=u; else if(!openSheet && history.state?.sheet) location.replace(u); else location.hash=u;
 }
 // Whether there's a page of Parts Bin's to go back to. A sheet that has closed leaves its step ahead of this one, and
 // history.length counts that too, so it's only the fallback.
@@ -409,15 +409,18 @@ function wirePhoto(el){ for(const pid of ['f','p']) for(const k of ['cam','pick'
 // it was. Opening one adds the step (or takes over the one a sheet closed a moment ago left, as the tag sheet does after
 // Save); closing it any other way steps back off it. onClose runs however it closes.
 const BEHIND='.app,.mobile-cloud,#tabbar,.jd-foot';
-let openSheet=null, stepping=false, nextPage='';
-function stepOff(){ stepping=true; history.back(); }
+// stepping: when Parts Bin last stepped back off a closed sheet, until that lands. One that never lands (with nothing behind
+// it) stops counting after two seconds, so it can't hold up opening anything else.
+let openSheet=null, stepping=0, nextPage='';
+const isStepping=()=>Date.now()-stepping<2000;
+function stepOff(){ stepping=Date.now(); history.back(); }
 function keepStep(){
-  if(!openSheet || stepping) return; // stepping back off a closed sheet: the step is added once that lands
+  if(!openSheet || isStepping()) return; // stepping back off a closed sheet: the step is added once that lands
   const s={...history.state, sheet:openSheet.id};
   try{ if(history.state?.sheet) history.replaceState(s,''); else history.pushState(s,''); }catch{} // a frame that can't: no step, as before
 }
 window.addEventListener('popstate',()=>{
-  if(stepping){ stepping=false; keepStep(); if(nextPage){ const u=nextPage; nextPage=''; location.hash=u; } return; } // the step back has landed
+  if(isStepping()){ stepping=0; keepStep(); if(nextPage){ const u=nextPage; nextPage=''; location.hash=u; } return; } // the step back has landed
   if(openSheet && history.state?.sheet!==openSheet.id) openSheet.close(); // Back, or another page opened over it
 });
 function sheet(html, onClose){
@@ -437,7 +440,7 @@ function sheet(html, onClose){
     if(back && back!==document.body) back.focus({preventScroll:true});
     // Off the sheet's step, unless Back has left it already, another sheet has taken it over, or a page opened from the
     // sheet has replaced it: all of those happen before this runs.
-    queueMicrotask(()=>{ if(!openSheet && !stepping && history.state?.sheet===me.id) stepOff(); });
+    queueMicrotask(()=>{ if(!openSheet && !isStepping() && history.state?.sheet===me.id) stepOff(); });
   }
   const title=bg.querySelector('.sheet h3'); if(title){ title.id='sheet-title'; bg.firstElementChild.setAttribute('aria-labelledby','sheet-title'); }
   root.append(bg); document.querySelectorAll(BEHIND).forEach(e=>e.inert=true); wirePhoto(bg); const f=bg.querySelector('input:not([type=file]),textarea,select'); f&&f.focus();

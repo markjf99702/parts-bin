@@ -594,6 +594,11 @@ await solo.waitForSelector('#edit');
 await solo.click('#edit'); await solo.click('.sheet #cancel'); await shut(solo);
 await solo.click('#back'); await solo.waitForFunction(() => location.hash === '#parts');
 await solo.close();
+// a step back off a closed sheet that never lands (nothing behind it) doesn't hold up opening anything else for long
+await page.goto(base + '#part/p-bme280'); await page.evaluate(() => { window.__back = History.prototype.back; History.prototype.back = () => {}; });
+await page.click('#edit'); await page.click('.sheet #cancel'); await page.waitForTimeout(2100);
+await page.click('#tabbar [data-go="parts"]'); await at('#parts');
+await page.evaluate(() => { History.prototype.back = window.__back; });
 // a new bin opens its page, and Back from there goes to the page the sheet was on
 await page.goto(base + '#bins'); await page.click('#addbin'); await page.fill('#f-code', 'BACK'); await page.click('.sheet #save');
 await page.waitForFunction(() => location.hash.startsWith('#bin/') && !document.querySelector('.sheet'));
