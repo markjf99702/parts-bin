@@ -93,8 +93,9 @@ assert.match((await page.evaluate(() => window.__written))[0], /#bag\/001$/);
 await page.waitForFunction(() => !document.querySelector('.sheet'));
 const bme = await page.evaluate(() => JSON.parse(localStorage.getItem('parts-bin')).items.parts['p-bme280']);
 assert.equal(bme.qty, 4); assert.equal(bme.bag, 1); assert.equal(bme.tagWritten, true);
-// next bag number moves on
+// next bag number moves on, with the description and its matches cleared for it
 assert.match(await page.textContent('.packhead .big'), /#002/);
+assert.equal(await page.inputValue('#desc'), ''); assert.equal(await page.locator('.matchlist').count(), 0);
 
 // ---- a new part through the same flow
 await page.fill('#desc', 'Soldering iron');
@@ -294,6 +295,7 @@ await page.fill('#inb-paste', await IN.encode({ partsbin: 1, batch: { id: 'ptest
 ] } }));
 await page.click('#inb-go');
 await page.waitForSelector('.diff');
+assert.equal(await page.inputValue('#inb-paste'), '', 'the link that opened is still in the box');
 assert.equal(await page.locator('.card.inb').count(), 1, 'a part that already says it all isn’t shown');
 assert.deepEqual(await page.locator('.diff .k').allTextContents(), ['Part number', 'Interface', 'I2C address', 'Supply', 'Tags', 'Notes']);
 await page.uncheck('.diff input[data-k="notes"]');
@@ -389,8 +391,13 @@ await laptop.page.click('#inc');
 await laptop.page.waitForFunction(() => JSON.parse(localStorage.getItem('parts-bin')).items.parts['p-scd41'].qty === 4);
 await laptop.page.waitForFunction(() => document.querySelector('#cloud')?.dataset.s === 'ok', null, { timeout: 8000 });
 await laptop.page.waitForTimeout(1600);
+// meanwhile the phone is typing in Pack: the sync draws the screen again, and the description, its matches and the
+// keyboard stay (it used to empty them)
+await page.goto(base + '#scan'); await page.fill('#desc', 'scd'); await page.waitForSelector('.matchlist [data-id="p-scd41"]:has-text("in stock 3")');
 await page.evaluate(() => document.querySelector('#cloud-m').click());
 await page.waitForFunction(() => JSON.parse(localStorage.getItem('parts-bin')).items.parts['p-scd41'].qty === 4, null, { timeout: 8000 });
+await page.waitForSelector('.matchlist [data-id="p-scd41"]:has-text("in stock 4")');
+assert.equal(await page.inputValue('#desc'), 'scd'); assert.equal(await page.evaluate(() => document.activeElement.id), 'desc');
 
 // ---- a Drive file that isn't JSON at all is left alone, and the page says it can't read it (Drive itself is fine)
 const BROKEN = '{"app":"parts-bin","items":{';
@@ -592,6 +599,44 @@ await page.goto(base + '#bins'); await page.click('#addbin'); await page.fill('#
 await page.waitForFunction(() => location.hash.startsWith('#bin/') && !document.querySelector('.sheet'));
 await page.goBack(); await at('#bins');
 await page.evaluate(() => { const d = JSON.parse(localStorage.getItem('parts-bin')), t = Date.now() + 1000; d.items.parts['p-back'].del = t; for (const b of Object.values(d.items.bins)) if (b.code === 'BACK') b.del = t; localStorage.setItem('parts-bin', JSON.stringify(d)); dispatchEvent(new StorageEvent('storage', { key: 'parts-bin' })); });
+
+// ---- a change made in another tab draws the screen again, keeping what's being typed and where the keyboard is (it used to
+// empty Pack's description and its matches and the API key being typed, and leave the keyboard nowhere)
+const tabB = await ctx.newPage();
+await tabB.goto(base + '#part/p-bme280'); await tabB.waitForSelector('#inc');
+const bump = async () => { const q = (await part('p-bme280')).qty; await tabB.click('#inc'); await page.waitForFunction(q => JSON.parse(localStorage.getItem('parts-bin')).items.parts['p-bme280'].qty === q + 1, q); return q + 1; };
+const mark = sel => page.evaluate(sel => { document.querySelector(sel).firstElementChild.dataset.was = '1'; }, sel);
+const redrawn = sel => page.waitForFunction(sel => !document.querySelector(sel).querySelector(':scope > [data-was]'), sel);
+const keyboard = () => page.evaluate(() => { const a = document.activeElement; return [a.id, a.selectionStart, a.selectionEnd]; });
+// Pack: the description, its matches (showing the new count) and the caret
+await page.goto(base + '#scan'); await page.fill('#desc', 'bme'); await page.waitForSelector('.matchlist [data-id="p-bme280"]');
+await page.evaluate(() => document.getElementById('desc').setSelectionRange(1, 2));
+await mark('#main'); let bmeQty = await bump(); await redrawn('#main');
+assert.equal(await page.inputValue('#desc'), 'bme');
+await page.waitForSelector(`.matchlist [data-id="p-bme280"]:has-text("in stock ${bmeQty}")`);
+assert.deepEqual(await keyboard(), ['desc', 1, 2]);
+// a count that isn't being typed shows the new one
+await page.goto(base + '#part/p-bme280'); await page.waitForSelector('#qv');
+await mark('#main'); bmeQty = await bump(); await redrawn('#main');
+assert.equal(await page.inputValue('#qv'), String(bmeQty));
+// a sheet open over the screen as it's drawn again still hands the keyboard back to the button that opened it
+await page.focus('#edit'); await page.keyboard.press('Enter'); await page.waitForSelector('.sheet #p-name');
+await mark('#main'); bmeQty = await bump(); await redrawn('#main');
+await page.keyboard.press('Escape'); await shut(page);
+assert.equal(await page.evaluate(() => document.activeElement.id), 'edit');
+// Settings shows none of the inventory, so it isn't drawn again at all: the API key and model being typed stay as they are
+await page.goto(base + '#settings'); await page.fill('#ai-key', 'sk-ant-typed-not-saved'); await page.fill('#ai-model', 'claude-typed');
+await page.evaluate(() => document.getElementById('ai-model').setSelectionRange(3, 3));
+await mark('#tabbar'); await bump(); await redrawn('#tabbar'); // the counts beside it are
+assert.equal(await page.inputValue('#ai-key'), 'sk-ant-typed-not-saved'); assert.equal(await page.inputValue('#ai-model'), 'claude-typed');
+assert.deepEqual(await keyboard(), ['ai-model', 3, 3]);
+// and Save shows what was kept (trimmed, and the usual model for none), Remove key an empty box
+await page.fill('#ai-key', '  sk-ant-not-a-real-key  '); await page.fill('#ai-model', ''); await page.click('#ai-save');
+await page.waitForSelector('#ai-clear');
+assert.equal(await page.inputValue('#ai-key'), 'sk-ant-not-a-real-key'); assert.equal(await page.inputValue('#ai-model'), (await import('../js/ai.js')).DEFAULT_MODEL);
+await page.click('#ai-clear'); await page.waitForFunction(() => !document.querySelector('#ai-clear'));
+assert.equal(await page.inputValue('#ai-key'), '');
+await tabB.close();
 
 // ---- an API key the API refuses (a stand-in for the API, and no real key): it says so, and the part can be typed in
 const aiCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });

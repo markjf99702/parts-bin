@@ -80,13 +80,13 @@ function searchBins(q){
 
 // ------------------------------------------------------------------ render
 // The screen last drawn: drawing the same one again (after a save, a sync or a change in another tab) keeps the place
-// on the page, and a new screen starts at the top.
+// on the page, what's being typed and where the keyboard is, and a new screen starts at the top.
 let shown='';
 function render(){
   S.route = parseHash();
   renderNav();
-  const key=S.route.view+'/'+S.route.arg, y=key===shown?window.scrollY:0;
-  const m=document.getElementById('main'); m.innerHTML='';
+  const key=S.route.view+'/'+S.route.arg, same=key===shown, y=same?window.scrollY:0;
+  const m=document.getElementById('main'), was=same?typing(m):null; m.innerHTML='';
   if(!S.loaded){ m.append(h('<div class="empty"><p>Loading inventory…</p></div>')); return; }
   const v=S.route.view;
   if(linkCode()){ m.append(h('<div class="empty"><p class="think" style="justify-content:center">Opening the batch…</p></div>')); return; }
@@ -101,6 +101,22 @@ function render(){
   else if(v==='scan') renderScan(m);
   else renderBins(m);
   window.scrollTo(0,y);
+  if(was) retype(m,was);
+}
+// What's being typed on a screen (the fields that differ from what was drawn, so a count a sync has just changed isn't
+// put back the way it was) and which field or button has the keyboard, with the caret.
+function typing(m){
+  const a=document.activeElement, f=a?.id && m.contains(a) ? a : null;
+  let caret=null; try{ if(f && typeof f.selectionStart==='number') caret=[f.selectionStart, f.selectionEnd, f.selectionDirection]; }catch{}
+  const fields=[...m.querySelectorAll('input[id],textarea[id]')].filter(e=>e.type!=='file' && e.value!==e.defaultValue).map(e=>[e.id,e.value]);
+  return {fields, focus:f?.id||'', caret};
+}
+// Puts it back on the screen drawn again. Each field put back says so ('input'), so Pack's matches come back with it.
+function retype(m,{fields,focus,caret}){
+  const at=i=>{ const e=document.getElementById(i); return e && m.contains(e) ? e : null; };
+  for(const [i,v] of fields){ const e=at(i); if(e && e.value!==v){ e.value=v; e.dispatchEvent(new Event('input',{bubbles:true})); } }
+  const f=focus && at(focus);
+  if(f && document.activeElement!==f){ f.focus({preventScroll:true}); if(caret) try{ f.setSelectionRange(...caret); }catch{} }
 }
 function renderNav(){
   const cur = {bin:'bins',part:'parts',inbox:'scan'}[S.route.view] || S.route.view;
@@ -335,7 +351,8 @@ function renderScan(m){
     drop.ondrop=e=>{e.preventDefault();drop.classList.remove('over'); file=e.dataTransfer.files[0]||null; showPreview();};
   }
   function showPreview(){ res.innerHTML=''; if(!file) return; const img=new Image(); img.className='preview'; img.src=URL.createObjectURL(file); res.append(img); }
-  function reset(){ file=null; if(fi) fi.value=''; ui.querySelector('#desc').value=''; res.innerHTML=''; st.textContent=''; }
+  // After a save. Saving has drawn the screen again already, keeping the description (render), so it's emptied there too.
+  function reset(){ file=null; if(fi) fi.value=''; for(const d of [ui.querySelector('#desc'), document.getElementById('desc')]) if(d) d.value=''; res.innerHTML=''; st.textContent=''; }
   function openEditor(seed, matched){
     const destId=head.querySelector('#dest').value;
     const base = matched ? {...matched} : {name:seed.name||'', category:seed.category||'', mpn:seed.mpn||'', unit:seed.unit||'pcs', tags:Array.isArray(seed.tags)?seed.tags.map(String):[], notes:seed.notes||''};
@@ -415,7 +432,9 @@ function sheet(html, onClose){
   function close(){
     if(openSheet!==me) return; openSheet=null;
     onClose?.();
-    root.innerHTML=''; document.removeEventListener('keydown',onKey); document.querySelectorAll(BEHIND).forEach(e=>e.inert=false); if(opener!==document.body && opener?.isConnected) opener.focus({preventScroll:true});
+    root.innerHTML=''; document.removeEventListener('keydown',onKey); document.querySelectorAll(BEHIND).forEach(e=>e.inert=false);
+    const back=opener?.isConnected ? opener : opener?.id ? document.getElementById(opener.id) : null; // drawn again meanwhile (a sync): the same button
+    if(back && back!==document.body) back.focus({preventScroll:true});
     // Off the sheet's step, unless Back has left it already, another sheet has taken it over, or a page opened from the
     // sheet has replaced it: all of those happen before this runs.
     queueMicrotask(()=>{ if(!openSheet && !stepping && history.state?.sheet===me.id) stepOff(); });
@@ -702,7 +721,7 @@ function renderInbox(m){
     <div class="field" style="margin-top:10px"><label for="inb-paste">Or paste the link or code</label><input id="inb-paste" class="mono" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(APP_URL)}#${IN.PREFIX}…"></div>
     <div class="row"><button class="btn" id="inb-go">Open it</button><button class="btn" id="inb-file">Load a file</button></div></section>`);
   const paste=intake.querySelector('#inb-paste');
-  const open=async()=>{ const t=paste.value.trim(); if(!t){ toast('Paste the link first'); return; } if(await takeBatch(t)) render(); };
+  const open=async()=>{ const t=paste.value.trim(); if(!t){ toast('Paste the link first'); return; } if(await takeBatch(t)){ paste.value=''; render(); } };
   intake.querySelector('#inb-go').onclick=open; paste.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); open(); } };
   intake.querySelector('#inb-file').onclick=importJson;
   m.append(intake);
@@ -844,8 +863,10 @@ function renderSettings(m){
     <div class="field"><label for="ai-model">Model</label><input id="ai-model" class="mono" spellcheck="false" value="${esc(ai.model)}"></div></div>
     <div class="row"><button class="btn primary" id="ai-save">Save</button>${ai.key?'<button class="btn" id="ai-clear">Remove key</button>':''}</div></section>`);
   m.append(aic);
-  aic.querySelector('#ai-save').onclick=()=>{ ai.save({key:aic.querySelector('#ai-key').value, model:aic.querySelector('#ai-model').value}); S.sample=makeSample(); S.imgOk=!!S.sample; toast(ai.key?'Saved':'No key saved'); render(); };
-  aic.querySelector('#ai-clear')?.addEventListener('click',()=>{ ai.save({key:'',model:ai.model}); S.sample=null; S.imgOk=false; toast('Key removed'); render(); });
+  const keyIn=aic.querySelector('#ai-key'), modelIn=aic.querySelector('#ai-model');
+  const kept=()=>{ keyIn.value=ai.key; modelIn.value=ai.model; S.sample=makeSample(); S.imgOk=!!S.sample; render(); }; // the fields show what was kept, not what was typed
+  aic.querySelector('#ai-save').onclick=()=>{ ai.save({key:keyIn.value, model:modelIn.value}); toast(ai.key?'Saved':'No key saved'); kept(); };
+  aic.querySelector('#ai-clear')?.addEventListener('click',()=>{ ai.save({key:'',model:ai.model}); toast('Key removed'); kept(); });
   const bk=h(`<section class="card"><h3>Backup</h3><p class="muted">A file with every bin, part and saved BOM. Loading a file merges it with what’s here, item by item, so nothing is lost. This is also how the Stockroom artifact’s export comes in.</p>
     <div class="row"><button class="btn" id="exp">Save a backup file</button><button class="btn" id="imp">Load a file</button></div></section>`);
   m.append(bk);
@@ -876,8 +897,10 @@ if(history.state?.sheet) stepOff(); // reloaded on a sheet's step (a phone reope
 S.db=localDb; S.user=null; S.canWrite=true;
 S.sample=makeSample(); S.imgOk=!!S.sample; S.assets=null; S.downloads=null;
 let got=0;
-localDb.collection('bins').onSnapshot(snap=>{ S.bins=new Map(snap.docs.map(d=>[d.id,{id:d.id,...d.data()}])); if(S.loaded) render(); else if(++got>=2){ S.loaded=true; render(); } });
-localDb.collection('parts').onSnapshot(snap=>{ S.parts=new Map(snap.docs.map(d=>[d.id,{id:d.id,...d.data()}])); if(S.loaded) render(); else if(++got>=2){ S.loaded=true; render(); } });
+// Settings shows nothing from the inventory, so a change to it there (a sync, another tab) only redraws the counts beside it.
+const inventoryChanged=()=>{ if(parseHash().view==='settings') renderNav(); else render(); };
+localDb.collection('bins').onSnapshot(snap=>{ S.bins=new Map(snap.docs.map(d=>[d.id,{id:d.id,...d.data()}])); if(S.loaded) inventoryChanged(); else if(++got>=2){ S.loaded=true; render(); } });
+localDb.collection('parts').onSnapshot(snap=>{ S.parts=new Map(snap.docs.map(d=>[d.id,{id:d.id,...d.data()}])); if(S.loaded) inventoryChanged(); else if(++got>=2){ S.loaded=true; render(); } });
 localDb.collection('projects').onSnapshot(snap=>{ S.projects=new Map(snap.docs.map(d=>[d.id,{id:d.id,...d.data()}])); if(S.loaded&&S.route.view==='bom') render(); });
 render();
 store.onSave(()=>drive.changed()); // a change that couldn't be kept is refused where it was made (writeFail)
