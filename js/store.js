@@ -15,7 +15,7 @@ const saved = [];
 const full = e => !!e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014);
 function write(next) {
   try { localStorage.setItem(KEY, M.canon(next)); }
-  catch (e) { throw full(e) ? { code: 'quota_exceeded', message: 'Storage is full — delete something first' } : { code: 'unavailable', message: 'Save failed — try again' }; }
+  catch (e) { throw full(e) ? { code: 'quota_exceeded', message: 'This browser’s storage is full, so that wasn’t saved.' } : { code: 'unavailable', message: 'Save failed — try again' }; }
   doc = next;
   notify();
   saved.forEach(f => f());

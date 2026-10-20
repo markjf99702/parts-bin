@@ -541,7 +541,9 @@ function editPart(p, opts={}){
   };
 }
 async function writePart(p){ const d={...p}; delete d.id; d.updatedAt=new Date().toISOString(); try{ await S.db.doc('parts/'+p.id).set(d); return true; }catch(e){ writeFail(e); return false; } }
-function writeFail(e){ if(e&&e.code==='invalid_argument'){ S.canWrite=false; toast('This view is read-only'); render(); } else if(e&&e.code==='quota_exceeded') toast('Storage is full — delete something first',3000); else toast('Save failed — try again'); }
+// With this browser's storage full, deleting can't make room (a deleted part is kept, marked deleted, so other devices
+// hear of it); dismissing what's waiting in the Inbox can.
+function writeFail(e){ if(e&&e.code==='invalid_argument'){ S.canWrite=false; toast('This view is read-only'); render(); } else if(e&&e.code==='quota_exceeded') toast('This browser’s storage is full, so that wasn’t saved.'+(INBOX.batches.length?' Dismiss what’s waiting in the Inbox to make room.':''),4500); else toast('Save failed — try again'); }
 async function shrink(file){
   try{ const bmp=await createImageBitmap(file); const max=1280; const s=Math.min(1,max/Math.max(bmp.width,bmp.height)); const c=document.createElement('canvas'); c.width=Math.round(bmp.width*s); c.height=Math.round(bmp.height*s); c.getContext('2d').drawImage(bmp,0,0,c.width,c.height); return await new Promise(r=>c.toBlob(b=>r(b||file),'image/jpeg',.82)); }catch{ return file; }
 }

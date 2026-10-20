@@ -513,13 +513,13 @@ const storageFull = on => page.evaluate(on => {
 }, on);
 const stored = () => page.evaluate(() => localStorage.getItem('parts-bin'));
 const noToast = () => page.evaluate(() => { document.getElementById('toast').hidden = true; });
-const FULL = '#toast:has-text("Storage is full — delete something first")';
+const FULL = '#toast:has-text("This browser’s storage is full, so that wasn’t saved.")';
 await page.goto(base + '#part/p-scd41'); await page.waitForSelector('#edit');
 await storageFull(true);
 const kept = await stored(), { qty: scdQty, notes: scdNotes } = await part('p-scd41');
 await noToast(); await page.click('#edit'); await page.fill('#p-notes', 'A note there’s no room for'); await page.click('.sheet #save');
 await page.waitForSelector(FULL); await page.waitForTimeout(300);
-assert.equal(await page.textContent('#toast'), 'Storage is full — delete something first', 'it said Saved after all');
+assert.equal(await page.textContent('#toast'), 'This browser’s storage is full, so that wasn’t saved.', 'it said Saved after all'); // nothing in the Inbox to dismiss
 assert.equal(await page.inputValue('.sheet #p-notes'), 'A note there’s no room for', 'the sheet stays open with the edit');
 // deleting is a save too (the part is kept, marked deleted, so other devices hear of it)
 await noToast(); page.once('dialog', d => d.accept()); await page.click('.sheet #del');
@@ -536,6 +536,7 @@ await page.goto(base + '#inbox');
 await page.fill('#inb-paste', await IN.encode({ partsbin: 1, batch: { id: 'ptest-full', source: 'details', items: [{ id: 'p-bme280', volts: '1.71–3.6 V' }] } }));
 await page.click('#inb-go'); await page.waitForSelector('[data-a="apply"]');
 await noToast(); await page.click('[data-a="apply"]'); await page.waitForSelector(FULL);
+assert.match(await page.textContent('#toast'), / Dismiss what’s waiting in the Inbox to make room\.$/, 'it says what makes room (deleting can’t)');
 assert.equal(await page.locator('.card.inb').count(), 1, 'the suggestion is still waiting');
 assert.equal(await stored(), kept, 'nothing was written');
 await storageFull(false);
