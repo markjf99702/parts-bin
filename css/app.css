@@ -6,23 +6,23 @@
 @font-face{font-family:"JetBrains Mono";font-weight:400 600;font-display:swap;src:url("../fonts/jetbrains-mono-500.woff2") format("woff2")}
 
 :root{
-  --bg:#F2F1EC; --panel:#FFFFFF; --panel2:#E9E8E2; --ink:#1E201D; --ink2:#5F635C; --ink3:#8F938B; --line:#D6D5CE;
-  --accent:#1B6F70; --accent-ink:#135859; --accent-soft:#D9ECEB;
+  --bg:#F2F1EC; --panel:#FFFFFF; --panel2:#E9E8E2; --ink:#1E201D; --ink2:#5F635C; --ink3:#666A63; --line:#D6D5CE;
+  --accent:#1B6F70; --accent-ink:#135859; --accent-soft:#D9ECEB; --on-accent:#FFFFFF;
   --label:#1E201D; --label-ink:#F6F5F0;
-  --ok:#2E7D4F; --ok-soft:#DCEFE3; --warn:#B7791F; --warn-soft:#F6EBD3; --bad:#B23A3A; --bad-soft:#F5DEDE;
+  --ok:#2E7D4F; --ok-soft:#DCEFE3; --warn:#8F5E14; --warn-soft:#F6EBD3; --bad:#B23A3A; --bad-soft:#F5DEDE;
   --shadow:0 1px 2px rgba(20,22,18,.08), 0 6px 18px -8px rgba(20,22,18,.18);
   --r:6px;
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
-  --bg:#151716; --panel:#1E211F; --panel2:#262A27; --ink:#E9E8E1; --ink2:#A7ABA3; --ink3:#767A72; --line:#333734;
-  --accent:#4FB3B4; --accent-ink:#7CCFCF; --accent-soft:#1D3535;
+  --bg:#151716; --panel:#1E211F; --panel2:#262A27; --ink:#E9E8E1; --ink2:#A7ABA3; --ink3:#90948C; --line:#333734;
+  --accent:#4FB3B4; --accent-ink:#7CCFCF; --accent-soft:#1D3535; --on-accent:#161816;
   --label:#F0EFE8; --label-ink:#161816;
   --ok:#5FBF87; --ok-soft:#1E3529; --warn:#E0A64A; --warn-soft:#3A2E17; --bad:#E06B6B; --bad-soft:#3E2020;
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 20px -8px rgba(0,0,0,.6);
 }}
 :root[data-theme="dark"]{
-  --bg:#151716; --panel:#1E211F; --panel2:#262A27; --ink:#E9E8E1; --ink2:#A7ABA3; --ink3:#767A72; --line:#333734;
-  --accent:#4FB3B4; --accent-ink:#7CCFCF; --accent-soft:#1D3535;
+  --bg:#151716; --panel:#1E211F; --panel2:#262A27; --ink:#E9E8E1; --ink2:#A7ABA3; --ink3:#90948C; --line:#333734;
+  --accent:#4FB3B4; --accent-ink:#7CCFCF; --accent-soft:#1D3535; --on-accent:#161816;
   --label:#F0EFE8; --label-ink:#161816;
   --ok:#5FBF87; --ok-soft:#1E3529; --warn:#E0A64A; --warn-soft:#3A2E17; --bad:#E06B6B; --bad-soft:#3E2020;
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 20px -8px rgba(0,0,0,.6);
@@ -71,7 +71,7 @@ a{color:var(--accent-ink)}
 /* ---- primitives ---- */
 .btn{display:inline-flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:8px 12px;font-weight:600;font-size:14px;white-space:nowrap}
 .btn:hover{border-color:var(--ink3)}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .btn.primary:hover{background:var(--accent-ink)}
 .btn.danger{color:var(--bad)}
 .btn.sm{padding:5px 9px;font-size:13px}
@@ -166,7 +166,7 @@ a{color:var(--accent-ink)}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion: reduce){.think::before{animation:none}}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-.label.box{background:var(--accent);color:#fff}
+.label.box{background:var(--accent);color:var(--on-accent)}
 .bagno{font-family:"JetBrains Mono",monospace;font-weight:600;font-size:12px;color:var(--ink2);background:var(--panel2);padding:1px 6px;border-radius:3px}
 .packhead{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px;align-items:center}
 .packhead .big{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:40px;line-height:1;font-variant-numeric:tabular-nums}
@@ -222,7 +222,7 @@ a{color:var(--accent-ink)}
 .bagtag .bt-text small{display:block;font-weight:400;color:var(--ink2);font-size:12.5px;margin-top:2px}
 
 /* ---- inbox, specs and reference photos ---- */
-.badge,.btn .count{display:inline-block;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:#fff;font:600 11px/18px "JetBrains Mono",monospace;text-align:center;padding:0 5px}
+.badge,.btn .count{display:inline-block;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:var(--on-accent);font:600 11px/18px "JetBrains Mono",monospace;text-align:center;padding:0 5px}
 .nav .badge{margin-left:auto}
 .tabbar button{position:relative}
 .tabbar .badge{position:absolute;top:0;left:calc(50% + 6px)}

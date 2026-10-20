@@ -433,6 +433,21 @@ for (const hash of ['#bins', '#parts', '#settings', '#bin/bin-env']) {
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   assert.ok(await page.evaluate(() => { const a = document.querySelector('.jd-foot a').getBoundingClientRect(); return !!document.elementFromPoint(a.left + a.width / 2, a.top + a.height / 2)?.closest('.jd-foot'); }), hash + ': the footer is under the tab bar');
 }
+// small grey text, warnings, and the writing on teal buttons and labels can be read (4.5:1), in the light theme and the dark
+for (const colorScheme of ['light', 'dark']) {
+  await page.emulateMedia({ colorScheme });
+  await page.goto(base + '#bins'); await page.waitForSelector('#addbin'); await page.waitForSelector('.label.box');
+  const ratios = await page.evaluate(() => {
+    const lum = c => c.match(/[\d.]+/g).slice(0, 3).map(v => v / 255).map(v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+    const color = v => { const i = document.createElement('i'); i.style.color = `var(${v})`; document.body.append(i); const c = getComputedStyle(i).color; i.remove(); return c; };
+    const btn = getComputedStyle(document.querySelector('.btn.primary')), box = getComputedStyle(document.querySelector('.label.box'));
+    return { 'grey on the page': ratio(color('--ink3'), color('--bg')), 'grey on a card': ratio(color('--ink3'), color('--panel')), 'a warning': ratio(color('--warn'), color('--warn-soft')),
+      'a teal button': ratio(btn.color, btn.backgroundColor), 'a box label': ratio(box.color, box.backgroundColor) };
+  });
+  for (const [what, r] of Object.entries(ratios)) assert.ok(r >= 4.5, `${colorScheme}: ${what} is ${r.toFixed(2)}:1`);
+}
+await page.emulateMedia({ colorScheme: 'light' });
 
 // ---- unpacking a box: the bin picked under Unpack into stays picked from bag to bag, and the page keeps its place
 await page.evaluate(() => {
