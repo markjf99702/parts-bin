@@ -493,18 +493,17 @@ async function shrink(file){
 }
 function tagSheet(b, kind='bin', opts={}){
   // A part tagged from its own page may not be in a numbered bag yet. It gets the next number here, so the tag
-  // carries the bag link; the number is saved with the part once the tag is written or its link is handed out.
+  // carries the bag link; the number is saved with the part once the tag is written or its link is copied.
   const newBag = kind==='part' && !b.bag ? nextBag() : 0;
   if(newBag) b={...b, bag:newBag};
   const url = kind==='part' ? partUrl(b) : binUrl(b);
   const label = kind==='part' ? (bagStr(b.bag)||b.name) : b.code;
   const native = NFC_OK && !FRAMED;
-  const along = 'https://junkdrawer.works/tag-along/?url='+encodeURIComponent(url)+'&label='+encodeURIComponent(String(label).slice(0,12));
   const title = kind==='part' ? `Tag bag <span class="label lg">${esc(bagStr(b.bag)||b.name)}</span>` : `Tag <span class="label lg ${isBox(b)?'box':''}">${esc(b.code)}</span>`;
   const {el,close}=sheet(`<h3>${title}</h3>
-    ${kind==='part'&&b.bag?`<p class="muted">${newBag?`This will be bag <b>${esc(bagStr(b.bag))}</b>. The number is saved once the tag is written; write it on the bag then.`:`Write <b>${esc(bagStr(b.bag))}</b> on the bag too, so it can be found without a phone.`}</p>`:''}
-    <div class="tagzone" id="tz"><div class="tz-icon">${ICONS.nfc}</div><div id="t-status">${native?'Stick a blank sticker on, then hold it to the <b>top edge of the phone</b>.':'This browser can’t write NFC tags. Use Tag Along, or open Parts Bin in Chrome on an Android phone.'}</div></div>
-    <div class="row" style="margin-top:12px">${native?`<button class="btn primary" id="write">${ICONS.nfc} Write tag</button>`:`<a class="btn primary" href="${esc(along)}" target="_blank" rel="noopener" style="text-decoration:none">${ICONS.nfc} Write with Tag Along</a>`}<button class="btn" id="copy">Copy link</button></div>
+    ${kind==='part'&&b.bag?`<p class="muted">${newBag?`This will be bag <b>${esc(bagStr(b.bag))}</b>. The number is saved once ${native?'the tag is written':'its link is copied'}; write it on the bag then.`:`Write <b>${esc(bagStr(b.bag))}</b> on the bag too, so it can be found without a phone.`}</p>`:''}
+    <div class="tagzone" id="tz"><div class="tz-icon">${ICONS.nfc}</div><div id="t-status">${native?'Stick a blank sticker on, then hold it to the <b>top edge of the phone</b>.':'Tags need Chrome on Android. Open Parts Bin there to write this one, or copy its link.'}</div></div>
+    <div class="row" style="margin-top:12px">${native?`<button class="btn primary" id="write">${ICONS.nfc} Write tag</button>`:''}<button class="btn" id="copy">Copy link</button></div>
     <div class="actions"><button class="btn" id="done">${newBag?'Cancel':kind==='part'?'Skip the tag':'Close'}</button></div>`);
   let ctl=null;
   const finish=()=>{ ctl?.abort(); close(); };
@@ -539,7 +538,6 @@ function tagSheet(b, kind='bin', opts={}){
       else st.textContent='Couldn’t write it ('+(e.message||e.name)+'). Hold it flat and still, then tap Write tag.';
     }
   }
-  if(!native) el.querySelector('a.btn.primary').addEventListener('click', e=>{ if(!claim()) e.preventDefault(); });
   if(native){
     el.querySelector('#write').onclick=()=>write(false);
     // When NFC is already allowed, start listening straight away: no extra tap between saving and tagging.

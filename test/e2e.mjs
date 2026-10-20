@@ -520,6 +520,27 @@ await ai.goto(base + '#inbox'); await ai.waitForSelector('text=Fill in details')
 assert.equal(await ai.locator('text=Every part has some details already').count(), 0);
 await aiCtx.close();
 
+// ---- in a browser that can't write tags, a bag's tag sheet says tags need Chrome on Android and offers the link to copy.
+// (It used to offer Tag Along, which needs NFC too and didn't read the link it was given, and opening it took the number.)
+const noNfcCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+await noNfcCtx.addInitScript(d => { if (!localStorage.getItem('parts-bin')) localStorage.setItem('parts-bin', d); }, JSON.stringify({ app: 'parts-bin', v: 1, items: { bins: {}, parts: { 'p-loose': { name: 'Loose part', qty: 1, t: 1 } }, projects: {} } }));
+await noNfcCtx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
+const noNfc = await noNfcCtx.newPage();
+await noNfc.goto(base + '#part/p-loose');
+assert.equal(await noNfc.evaluate(() => 'NDEFReader' in window), false);
+await noNfc.click('text=Bag tag');
+await noNfc.waitForSelector('.sheet #copy');
+assert.equal(await noNfc.locator('.sheet a').count(), 0, 'a link out of the tag sheet');
+assert.equal(await noNfc.textContent('.sheet #t-status'), 'Tags need Chrome on Android. Open Parts Bin there to write this one, or copy its link.');
+assert.match(await noNfc.textContent('.sheet p.muted'), /The number is saved once its link is copied/);
+const looseBag = () => noNfc.evaluate(() => JSON.parse(localStorage.getItem('parts-bin')).items.parts['p-loose'].bag);
+await noNfc.click('.sheet #done'); assert.ok(!(await looseBag()), 'looking at the sheet took no number');
+await noNfc.click('text=Bag tag'); await noNfc.click('.sheet #copy');
+await noNfc.waitForSelector('#toast:has-text("Link copied")');
+assert.equal(await noNfc.evaluate(() => navigator.clipboard.readText()), base + '#bag/001');
+assert.equal(await looseBag(), 1, 'copying the link took the number');
+await noNfcCtx.close();
+
 // ---- a backup saved late in the evening is named for that day, not the next one (as it is in UTC)
 const tzCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'America/New_York', acceptDownloads: true });
 const tz = await tzCtx.newPage();
