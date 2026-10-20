@@ -23,18 +23,30 @@ export function parseBom(text) {
   });
 }
 
-// The part a line most likely means: the one whose name, part number and tags hold the most of the line's words
-// (counted by length), as long as that's at least half. conf is that share.
+// A part number is a word with letters and digits, four characters or more: SCD41, 1N4148, ESP32, 3.3V. A number with a
+// unit isn't one (100uF, 40pin, 1000mAh, 2.54mm): those are written so many ways ("40pin", "40 pin") that they can't rule a
+// part out. A voltage is one, though, since a 3.3V regulator isn't a 5V one. Takes a word from norm().
+const UNIT = /^\d+(\.\d+)?[a-z]+$/, VOLTS = /^\d+(\.\d+)?v$/;
+export const isPartNumber = w => w.length >= 4 && /[a-z]/.test(w) && /\d/.test(w) && (!UNIT.test(w) || VOLTS.test(w));
+
+// The part a line most likely means: the one whose name, part number and tags hold the most of the line's words, counted
+// by length, with part numbers counted twice. A line that names a part number only matches a part that has one of them,
+// and a part that has one always matches, at a share of at least 0.6: "SCD41 breakout" is the SCD41, and "BME280
+// breakout" isn't a BMP280 breakout. A line of plain words needs at least half of them. conf is the share.
 export function matchPart(name, parts) {
   const t = norm(name).split(' ').filter(w => w.length > 1); if (!t.length) return null;
+  const weight = w => (isPartNumber(w) ? 2 : 1) * w.length, all = t.reduce((n, w) => n + weight(w), 0);
+  const numbered = t.some(isPartNumber);
   let best = null, bs = 0;
   for (const p of parts) {
     const hay = norm([p.name, p.mpn, (p.tags || []).join(' ')].join(' '));
-    let s = 0; for (const w of t) { if (hay.includes(w)) s += w.length; }
-    const cov = s / t.join('').length;
-    if (cov > bs && cov >= 0.5) { bs = cov; best = p; }
+    let s = 0, shared = false;
+    for (const w of t) if (hay.includes(w)) { s += weight(w); if (isPartNumber(w)) shared = true; }
+    const cov = s / all;
+    if (numbered ? !shared : cov < 0.5) continue;
+    if (cov > bs) { bs = cov; best = p; }
   }
-  return best ? { p: best, conf: bs } : null;
+  return best ? { p: best, conf: numbered ? Math.max(bs, 0.6) : bs } : null;
 }
 
 // How many more a line needs than there are, to the thousandth: 0.3 m wanted with 0.1 m in stock is short 0.2 (plain

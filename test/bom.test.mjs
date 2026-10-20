@@ -1,7 +1,7 @@
 // BOM check: reading a pasted parts list, and finding each line in the inventory.  node --test
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseBom, matchPart, shortBy } from '../js/bom.js';
+import { parseBom, matchPart, isPartNumber, shortBy } from '../js/bom.js';
 
 test('a count first or last, or none', () => {
   assert.deepEqual(parseBom('2x XIAO ESP32-S3\n1 SCD41 breakout\n3 WS2812 strip segment\nM3 heat-set inserts x8\nSCD41 ×1\nLED strip, 3\nProto board\n# a note\n\n'), [
@@ -40,6 +40,35 @@ test('each line finds the part that holds most of its words', () => {
   assert.equal(matchPart('heat-set inserts', parts).p.id, 'm3');
   assert.equal(matchPart('SGP30', parts), null);
   assert.equal(matchPart('', parts), null);
+});
+
+test('a part number decides the match', () => {
+  for (const w of ['scd41', '1n4148', 'esp32', '3.3v', '74hc595', 'm3x8']) assert.ok(isPartNumber(w), w);
+  for (const w of ['100uf', '40pin', '1000mah', '2.54mm', '22awg', '18650', 's3', '10k', 'breakout']) assert.ok(!isPartNumber(w), w);
+  // the placeholder's own example: SCD41 is 5 of the line's 13 letters, but it's the part (shown as fuzzy)
+  const scd = [{ id: 'scd41', name: 'SCD41', tags: ['generic'] }];
+  assert.equal(matchPart('SCD41 breakout', scd).p.id, 'scd41');
+  assert.equal(matchPart('SCD41 breakout', scd).conf, 0.6);
+  // a line that names one part doesn't match another on the words around it
+  assert.equal(matchPart('BME280 breakout', [{ id: 'bmp', name: 'BMP280 breakout' }]), null);
+  assert.equal(matchPart('BME280 breakout board', [{ id: 'bmp', name: 'BMP280 breakout board' }]), null);
+  assert.equal(matchPart('3.3V regulator', [{ id: 'r5', name: '5V regulator' }]), null);
+  assert.equal(matchPart('3.3V regulator', [{ id: 'r5', name: '5V regulator' }, { id: 'r33', name: 'AMS1117 3.3V regulator' }]).p.id, 'r33');
+  // the part number can be in the name, the part number field or the tags
+  assert.equal(matchPart('BMP280 breakout', [{ id: 'hw', name: 'HW611 (BMP280)' }]).p.id, 'hw');
+  assert.equal(matchPart('BMP280 breakout', [{ id: 'hw', name: 'HW-611 pressure sensor', mpn: 'BMP280' }]).p.id, 'hw');
+  assert.equal(matchPart('ESP32 board', [{ id: 'x', name: 'Seeed XIAO', tags: ['esp32'] }]).p.id, 'x');
+  // of two parts with the number, the one that holds more of the line wins
+  assert.equal(matchPart('BME280 breakout (Adafruit)', [{ id: 'g', name: 'BME280' }, { id: 'a', name: 'BME280 breakout (Adafruit)' }]).p.id, 'a');
+});
+
+test('a number with a unit, and a line of plain words, match as before', () => {
+  assert.equal(matchPart('40pin header', [{ id: 'h', name: 'Male header 40 pin' }]).p.id, 'h');
+  assert.equal(matchPart('100uF capacitor', [{ id: 'c', name: '100 uF electrolytic capacitor' }]).p.id, 'c');
+  assert.equal(matchPart('2.54mm header', [{ id: 'h', name: 'Pin header 2.54 mm' }]).p.id, 'h');
+  assert.equal(matchPart('heat shrink tubing 3mm', [{ id: 'hs', name: 'Heat shrink tubing 3mm' }]).conf, 1);
+  assert.equal(matchPart('silicone wire', [{ id: 'w', name: 'Silicone wire 22AWG' }]).p.id, 'w');
+  assert.equal(matchPart('red hookup wire', [{ id: 'w', name: 'Silicone wire 22AWG' }]), null, 'under half of the words');
 });
 
 test('a shortfall in metres or grams reads as a person would write it', () => {
