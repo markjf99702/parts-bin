@@ -175,7 +175,7 @@ function renderBin(m, binId){
   head.querySelector('#add')?.addEventListener('click',()=>editPart({binId}));
   head.querySelector('#pack')?.addEventListener('click',()=>{ localSet('sr.packbox',b.id); go('scan'); });
   head.querySelector('#print').onclick=()=>printList(b,ps);
-  head.querySelector('#copy').onclick=()=>copyText(ps.map(p=>`${p.bag?bagStr(p.bag)+' ':''}${p.name}${p.qty!=null?' ×'+p.qty:''}`).join('\n'),'List copied — paste into Manifest','Copy the list');
+  head.querySelector('#copy').onclick=()=>copyText(ps.map(p=>`${p.bag?bagStr(p.bag)+' ':''}${p.name}${p.qty!=null?' ×'+p.qty:''}`).join('\n'),'List copied','Copy the list');
   m.append(h(`<div class="binhead"><div class="photo">${photoImg(b.photo)||ICONS.box}</div><div><span class="label lg ${isBox(b)?'box':''}">${esc(b.code)}</span><h2>${esc(b.name||'')}</h2><div class="muted">${esc(b.location||'')}${b.notes?` · ${esc(b.notes)}`:''}</div><div class="tiny" style="margin-top:6px">${ps.length} ${isBox(b)?'bag':'part'}${ps.length===1?'':'s'}${b.tagWritten?' · NFC tag written':''}${b.sealed?' · sealed':''}</div></div></div>`));
   if(!ps.length){ m.append(h(`<div class="empty"><p>${isBox(b)?'Nothing packed in this box yet.':'Nothing in this bin yet.'}</p></div>`)); return; }
   if(isBox(b)&&S.canWrite){
