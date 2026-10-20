@@ -38,7 +38,7 @@ const fakeNfc = () => {
   window.__written = []; let pending = null;
   window.__tap = () => { const p = pending; pending = null; if (!p) return false; window.__written.push(p.msg.records[0].data); p.resolve(); return true; };
   window.NDEFReader = class {
-    async write(msg, o = {}) { return new Promise((resolve, reject) => { pending = { msg, resolve, reject }; o.signal?.addEventListener('abort', () => reject(new DOMException('stopped', 'AbortError'))); }); }
+    async write(msg, o = {}) { return new Promise((resolve, reject) => { const p = pending = { msg, resolve, reject }; o.signal?.addEventListener('abort', () => { if (pending === p) pending = null; reject(new DOMException('stopped', 'AbortError')); }); }); } // a write that's stopped isn't made
     async scan() { window.__reader = this; }
   };
   window.__read = url => window.__reader?.onreading?.({ message: { records: [{ recordType: 'url', data: new TextEncoder().encode(url) }] } });
@@ -537,6 +537,61 @@ await page.goto(base + '#part/p-scd41'); await page.reload(); await page.waitFor
 assert.equal((await part('p-scd41')).notes, scdNotes);
 assert.equal((await part('p-scd41')).qty, scdQty);
 assert.ok(!Object.values(JSON.parse(await stored()).items.projects).some(p => p.name === 'No room'));
+
+// ---- the phone's Back closes a sheet and leaves the page as it was, as an Android app does (it used to go back a page
+// underneath, with the sheet still open over it)
+const at = h => page.waitForFunction(h => location.hash === h, h);
+const shut = p => p.waitForFunction(() => !document.querySelector('.sheet') && !history.state?.sheet); // closed, and off its step
+await page.goto(base + '#bins'); await page.goto(base + '#bin/bin-env'); await page.goto(base + '#part/p-bme280');
+await page.click('#edit'); await page.waitForSelector('.sheet #p-name');
+await page.goBack(); await shut(page);
+assert.equal(await page.evaluate(() => location.hash), '#part/p-bme280', 'Back went to another page');
+assert.equal(await page.textContent('.binhead h2'), 'BME280 (Adafruit)');
+assert.equal(await page.evaluate(() => document.querySelector('.app').inert), false, 'the page behind the sheet can be used again');
+await page.goBack(); await at('#bin/bin-env');
+assert.equal(await page.locator('.sheet').count(), 0);
+// closed by Cancel, Escape or a tap outside, a sheet takes its step with it: the next Back leaves the page, and so does ←
+for (const how of ['Cancel', 'Escape', 'a tap outside', '←']) {
+  await page.goto(base + '#bin/bin-env'); await page.goto(base + '#part/p-bme280');
+  await page.click('#edit'); await page.waitForSelector('.sheet #p-name');
+  if (how === 'Escape') await page.keyboard.press('Escape'); else if (how === 'a tap outside') await page.mouse.click(5, 5); else await page.click('.sheet #cancel');
+  await shut(page);
+  if (how === '←') await page.click('#back'); else await page.goBack();
+  await at('#bin/bin-env');
+}
+// Save, then the tag sheet: one step for the two, and Back stops the write waiting for the sticker
+await page.goto(base + '#part/p-bme280'); await page.click('#edit'); await page.check('#p-dotag'); await page.click('.sheet #save');
+await page.waitForSelector('#tz.wait');
+await page.goBack(); await shut(page);
+assert.equal(await page.evaluate(() => location.hash), '#part/p-bme280');
+assert.equal(await page.evaluate(() => window.__tap()), false, 'the write was still waiting after Back');
+await page.goBack(); await at('#bin/bin-env');
+// a new bag's tag sheet closed by Back, Escape or a tap outside stops waiting for the sticker and takes no number
+await page.evaluate(() => { const d = JSON.parse(localStorage.getItem('parts-bin')); d.items.parts['p-back'] = { name: 'Back test', qty: 1, t: Date.now() }; localStorage.setItem('parts-bin', JSON.stringify(d)); dispatchEvent(new StorageEvent('storage', { key: 'parts-bin' })); });
+await page.goto(base + '#part/p-back');
+for (const how of ['Back', 'Escape', 'a tap outside']) {
+  await page.click('text=Bag tag'); await page.click('.sheet #write'); await page.waitForSelector('#tz.wait');
+  if (how === 'Back') await page.goBack(); else if (how === 'Escape') await page.keyboard.press('Escape'); else await page.mouse.click(5, 5);
+  await shut(page);
+  assert.equal(await page.evaluate(() => location.hash), '#part/p-back', how);
+  assert.equal(await page.evaluate(() => window.__tap()), false, `${how}: the write was still waiting`);
+  assert.ok(!(await part('p-back')).bag, `${how}: the bag number was taken`);
+}
+// reloaded with a sheet open (as a phone does with a tab it put away), one Back still leaves the page
+await page.goto(base + '#bin/bin-env'); await page.goto(base + '#part/p-bme280'); await page.click('#edit'); await page.waitForSelector('.sheet #p-name');
+await page.reload(); await page.waitForSelector('#edit'); await shut(page);
+await page.goBack(); await at('#bin/bin-env');
+// a part opened in a tab of its own (as a tag does when Parts Bin is closed): after a sheet, its ← goes to Parts
+const [solo] = await Promise.all([ctx.waitForEvent('page'), page.evaluate(u => { window.open(u); }, base + '#part/p-scd41')]);
+await solo.waitForSelector('#edit');
+await solo.click('#edit'); await solo.click('.sheet #cancel'); await shut(solo);
+await solo.click('#back'); await solo.waitForFunction(() => location.hash === '#parts');
+await solo.close();
+// a new bin opens its page, and Back from there goes to the page the sheet was on
+await page.goto(base + '#bins'); await page.click('#addbin'); await page.fill('#f-code', 'BACK'); await page.click('.sheet #save');
+await page.waitForFunction(() => location.hash.startsWith('#bin/') && !document.querySelector('.sheet'));
+await page.goBack(); await at('#bins');
+await page.evaluate(() => { const d = JSON.parse(localStorage.getItem('parts-bin')), t = Date.now() + 1000; d.items.parts['p-back'].del = t; for (const b of Object.values(d.items.bins)) if (b.code === 'BACK') b.del = t; localStorage.setItem('parts-bin', JSON.stringify(d)); dispatchEvent(new StorageEvent('storage', { key: 'parts-bin' })); });
 
 // ---- an API key the API refuses (a stand-in for the API, and no real key): it says so, and the part can be typed in
 const aiCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });

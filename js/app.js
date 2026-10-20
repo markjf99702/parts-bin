@@ -30,7 +30,15 @@ const NAV = [['bins','Bins'],['parts','Parts'],['bom','BOM check'],['scan','Pack
 
 // ------------------------------------------------------------------ utils
 function parseHash(){ const h=location.hash.replace(/^#\/?/,''); const [view,...rest]=h.split('/'); return {view:view||'bins', arg:rest.join('/')||''}; }
-function go(view,arg){ location.hash = arg ? `#${view}/${arg}` : `#${view}`; }
+// A page opened as a sheet closes (a new bin's, or Parts after Delete) takes the sheet's step in the history, so Back from
+// it goes to the page the sheet was on. While Parts Bin is stepping back off a closed sheet, the page opens once that lands.
+function go(view,arg){
+  const u = arg ? `#${view}/${arg}` : `#${view}`;
+  if(stepping) nextPage=u; else if(!openSheet && history.state?.sheet) location.replace(u); else location.hash=u;
+}
+// Whether there's a page of Parts Bin's to go back to. A sheet that has closed leaves its step ahead of this one, and
+// history.length counts that too, so it's only the fallback.
+function canGoBack(){ return window.navigation ? navigation.canGoBack : history.length>1; }
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function id(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); }
 function toast(msg,ms=1800){ const t=document.getElementById('toast'), say=document.getElementById('say'); t.textContent=say.textContent=msg; t.hidden=false; clearTimeout(t._t); t._t=setTimeout(()=>{ t.hidden=true; say.textContent=''; },ms); }
@@ -215,7 +223,7 @@ function renderPartPage(m, pid){
   const p=S.parts.get(pid); if(!p){ m.append(h('<div class="empty"><p>Part not found.</p></div>')); return; }
   const b=binOf(p);
   const head=h(`<div class="row pagehead" style="margin-bottom:10px"><button class="btn icon" id="back" aria-label="Back">${ICONS.back}</button><span class="grow"></span>${S.canWrite?`<button class="btn sm" id="edit">Edit</button>`:''}</div>`);
-  m.append(head); head.querySelector('#back').onclick=()=>history.length>1?history.back():go('parts');
+  m.append(head); head.querySelector('#back').onclick=()=>canGoBack()?history.back():go('parts');
   head.querySelector('#edit')?.addEventListener('click',()=>editPart(p));
   if(S.canWrite){ const tg=h(`<button class="btn sm">${ICONS.nfc} Bag tag</button>`); tg.onclick=()=>tagSheet(p,'part'); head.querySelector('#edit').before(tg); }
   const ref=!assetUrl(p.photo)&&p.img;
@@ -380,17 +388,41 @@ function picked(el,pid){ return el.querySelector('#'+pid+'-cam')?.files?.[0] || 
 function wirePhoto(el){ for(const pid of ['f','p']) for(const k of ['cam','pick']){ const inp=el.querySelector('#'+pid+'-'+k); if(!inp) continue; inp.onchange=()=>{ const f=inp.files[0]; const other=el.querySelector('#'+pid+'-'+(k==='cam'?'pick':'cam')); if(other) other.value=''; const pv=el.querySelector('#'+pid+'-prev'); if(f&&pv){ pv.src=URL.createObjectURL(f); pv.hidden=false; } }; } }
 // While a sheet is open the page behind it is inert, so the keyboard stays in the sheet. Closing it hands the keyboard back
 // to whatever opened it.
+// A sheet is also a step in the browser's history, as in an Android app: the phone's Back closes it and leaves the page as
+// it was. Opening one adds the step (or takes over the one a sheet closed a moment ago left, as the tag sheet does after
+// Save); closing it any other way steps back off it. onClose runs however it closes.
 const BEHIND='.app,.mobile-cloud,#tabbar,.jd-foot';
-function sheet(html){
+let openSheet=null, stepping=false, nextPage='';
+function stepOff(){ stepping=true; history.back(); }
+function keepStep(){
+  if(!openSheet || stepping) return; // stepping back off a closed sheet: the step is added once that lands
+  const s={...history.state, sheet:openSheet.id};
+  try{ if(history.state?.sheet) history.replaceState(s,''); else history.pushState(s,''); }catch{} // a frame that can't: no step, as before
+}
+window.addEventListener('popstate',()=>{
+  if(stepping){ stepping=false; keepStep(); if(nextPage){ const u=nextPage; nextPage=''; location.hash=u; } return; } // the step back has landed
+  if(openSheet && history.state?.sheet!==openSheet.id) openSheet.close(); // Back, or another page opened over it
+});
+function sheet(html, onClose){
+  openSheet?.close(); // one at a time
   const root=document.getElementById('sheet-root'); root.innerHTML='';
   const opener=document.activeElement;
   const bg=h(`<div class="sheet-bg"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`);
+  const me={id:id(), close};
   bg.addEventListener('click',e=>{ if(e.target===bg) close(); });
   const onKey=e=>{ if(e.key==='Escape') close(); };
   document.addEventListener('keydown',onKey);
-  function close(){ root.innerHTML=''; document.removeEventListener('keydown',onKey); document.querySelectorAll(BEHIND).forEach(e=>e.inert=false); if(opener!==document.body && opener?.isConnected) opener.focus({preventScroll:true}); }
+  function close(){
+    if(openSheet!==me) return; openSheet=null;
+    onClose?.();
+    root.innerHTML=''; document.removeEventListener('keydown',onKey); document.querySelectorAll(BEHIND).forEach(e=>e.inert=false); if(opener!==document.body && opener?.isConnected) opener.focus({preventScroll:true});
+    // Off the sheet's step, unless Back has left it already, another sheet has taken it over, or a page opened from the
+    // sheet has replaced it: all of those happen before this runs.
+    queueMicrotask(()=>{ if(!openSheet && !stepping && history.state?.sheet===me.id) stepOff(); });
+  }
   const title=bg.querySelector('.sheet h3'); if(title){ title.id='sheet-title'; bg.firstElementChild.setAttribute('aria-labelledby','sheet-title'); }
   root.append(bg); document.querySelectorAll(BEHIND).forEach(e=>e.inert=true); wirePhoto(bg); const f=bg.querySelector('input:not([type=file]),textarea,select'); f&&f.focus();
+  openSheet=me; keepStep();
   return {el:bg.querySelector('.sheet'), close};
 }
 function editBin(b){
@@ -500,17 +532,16 @@ function tagSheet(b, kind='bin', opts={}){
   const label = kind==='part' ? (bagStr(b.bag)||b.name) : b.code;
   const native = NFC_OK && !FRAMED;
   const title = kind==='part' ? `Tag bag <span class="label lg">${esc(bagStr(b.bag)||b.name)}</span>` : `Tag <span class="label lg ${isBox(b)?'box':''}">${esc(b.code)}</span>`;
+  let ctl=null; // however the sheet closes (Back, Escape, a tap outside, Cancel), a write still waiting for the sticker stops
   const {el,close}=sheet(`<h3>${title}</h3>
     ${kind==='part'&&b.bag?`<p class="muted">${newBag?`This will be bag <b>${esc(bagStr(b.bag))}</b>. The number is saved once ${native?'the tag is written':'its link is copied'}; write it on the bag then.`:`Write <b>${esc(bagStr(b.bag))}</b> on the bag too, so it can be found without a phone.`}</p>`:''}
     <div class="tagzone" id="tz"><div class="tz-icon">${ICONS.nfc}</div><div id="t-status">${native?'Stick a blank sticker on, then hold it to the <b>top edge of the phone</b>.':'Tags need Chrome on Android. Open Parts Bin there to write this one, or copy its link.'}</div></div>
     <div class="row" style="margin-top:12px">${native?`<button class="btn primary" id="write">${ICONS.nfc} Write tag</button>`:''}<button class="btn" id="copy">Copy link</button></div>
-    <div class="actions"><button class="btn" id="done">${newBag?'Cancel':kind==='part'?'Skip the tag':'Close'}</button></div>`);
-  let ctl=null;
-  const finish=()=>{ ctl?.abort(); close(); };
-  el.querySelector('#done').onclick=finish;
+    <div class="actions"><button class="btn" id="done">${newBag?'Cancel':kind==='part'?'Skip the tag':'Close'}</button></div>`, ()=>ctl?.abort());
+  el.querySelector('#done').onclick=close;
   // The number was free when the sheet opened. If another part has taken it since (another tab, a sync), stop here
   // rather than put two bags on one number.
-  const taken=()=>{ if(!newBag || ![...S.parts.values()].some(x=>x.id!==b.id && Number(x.bag)===newBag)) return false; finish(); toast(`Bag ${bagStr(newBag)} has just been used. Tap Bag tag again for the next number.`,4000); return true; };
+  const taken=()=>{ if(!newBag || ![...S.parts.values()].some(x=>x.id!==b.id && Number(x.bag)===newBag)) return false; close(); toast(`Bag ${bagStr(newBag)} has just been used. Tap Bag tag again for the next number.`,4000); return true; };
   const claim=async()=>{ if(taken()) return false; if(!newBag) return true; try{ await S.db.doc('parts/'+b.id).update({bag:newBag}); }catch(e){ if(e?.code!=='invalid_argument'){ writeFail(e); return false; } } return true; };
   el.querySelector('#copy').onclick=async()=>{ if(!await claim()) return; navigator.clipboard?.writeText(url).then(()=>toast('Link copied'),()=>toast(url,4000)); };
   const st=el.querySelector('#t-status'), tz=el.querySelector('#tz');
@@ -572,7 +603,7 @@ function onTag(ev){
     if(rec.recordType!=='url' && rec.recordType!=='absolute-url') continue;
     const t=tagTarget(new TextDecoder().decode(rec.data)); if(!t) continue;
     try{ navigator.vibrate?.(40); }catch{}
-    location.hash='#'+t.view+'/'+t.arg;
+    go(t.view, t.arg);
     if(t.old){ const hit=findTarget(t); if(hit && S.canWrite) setTimeout(()=>offerRewrite(hit),150); }
     return;
   }
@@ -841,6 +872,7 @@ function importJson(){
 
 // ------------------------------------------------------------------ boot
 window.addEventListener('hashchange',()=>{ if(linkCode()) takeLink(); else render(); });
+if(history.state?.sheet) stepOff(); // reloaded on a sheet's step (a phone reopening a tab it put away), with no sheet now
 S.db=localDb; S.user=null; S.canWrite=true;
 S.sample=makeSample(); S.imgOk=!!S.sample; S.assets=null; S.downloads=null;
 let got=0;
