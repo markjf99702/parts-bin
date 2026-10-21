@@ -757,6 +757,51 @@ assert.deepEqual(blobs, [], 'asked this site for a photo it can’t have');
 const desk = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 await desk.goto(base);
 
+// ---- a bag number on two parts (two devices numbering bags before they'd synced): flagged where bags are numbered,
+// listed under Parts with the numbers no part has, the tag opens the bag that has it, and the other part takes a new number
+{
+  const pad = n => String(n).padStart(3, '0');
+  const live = Object.entries(await page.evaluate(() => JSON.parse(localStorage.getItem('parts-bin')).items.parts)).filter(([, x]) => !(x.del >= (x.t || 0)));
+  const maxBag = Math.max(...live.map(([, x]) => Number(x.bag) || 0));
+  const [tid, tp] = live.find(([, x]) => x.tagWritten && Number(x.bag) > 0), n = Number(tp.bag);
+  await page.goto(base + '#bins'); await page.waitForSelector('.bin');
+  assert.equal(await page.locator('.clashbar').count(), 0, 'nothing to flag yet');
+  // what a sync brings in: another device's untagged part on the same number, and a bag two above the highest
+  await page.evaluate(([n, max]) => { const d = JSON.parse(localStorage.getItem('parts-bin')), t = Date.now();
+    d.items.parts['p-clash'] = { name: 'Buzzer module', bag: n, qty: 5, unit: 'pcs', tags: [], t };
+    d.items.parts['p-far'] = { name: 'Far bag', bag: max + 2, qty: 1, unit: 'pcs', tags: [], t };
+    localStorage.setItem('parts-bin', JSON.stringify(d)); dispatchEvent(new StorageEvent('storage', { key: 'parts-bin' })); }, [n, maxBag]);
+  await page.waitForSelector(`.clashbar:has-text("#${pad(n)}")`);
+  assert.match(await page.textContent('#toast'), new RegExp(`Bag #${pad(n)} is now on more than one part`));
+  await page.goto(base + '#scan'); await page.waitForSelector('.clashbar'); // where the next number is handed out
+  await page.click('.clashbar #showclash'); await page.waitForSelector('.item');
+  assert.equal(await page.evaluate(() => location.hash), '#parts');
+  assert.deepEqual(await page.locator('.item .t').allTextContents(), [tp.name, 'Buzzer module'], 'the part with the tag first');
+  assert.equal(await page.locator('.item .chip:has-text("bag used twice")').count(), 2);
+  assert.match(await page.textContent('.gapnote'), new RegExp(`On no part: #${pad(maxBag + 1)}\\.`));
+  // the tag for that number opens the bag that has the tag, which names the other part
+  await page.goto(base + '#bag/' + pad(n)); await page.waitForSelector('.clash');
+  assert.equal(await page.textContent('.binhead h2'), tp.name);
+  assert.match(await page.textContent('.clash'), /Also on Buzzer module.*give the other part a new number/);
+  // the other part takes the next number, and its tag is written in the same go
+  await page.click('.clash a'); await page.waitForSelector('.binhead h2:text-is("Buzzer module")'); await page.waitForSelector('#renumber');
+  assert.match(await page.textContent('.clash'), /That one has the tag, so give this one a new number/);
+  const nb = maxBag + 3;
+  assert.equal(await page.textContent('#renumber'), `New number: #${pad(nb)}`);
+  await page.click('#renumber'); await page.waitForSelector('.sheet #p-bag');
+  assert.equal(await page.inputValue('#p-bag'), String(nb)); assert.ok(await page.isChecked('#p-dotag'));
+  await page.click('.sheet #save'); await tapTag();
+  assert.equal((await page.evaluate(() => window.__written)).at(-1), base + '#bag/' + pad(nb));
+  assert.equal((await part('p-clash')).bag, nb); assert.equal((await part(tid)).bag, n);
+  await page.waitForFunction(() => !document.querySelector('.clash'));
+  await page.goto(base + '#bins'); await page.waitForSelector('.bin'); assert.equal(await page.locator('.clashbar').count(), 0);
+  await page.goto(base + '#parts'); await page.waitForSelector('.empty:has-text("No bag number is on more than one part")');
+  // tidy up for what follows
+  await page.evaluate(() => { const d = JSON.parse(localStorage.getItem('parts-bin')), t = Date.now() + 1000; d.items.parts['p-clash'].del = t; d.items.parts['p-far'].del = t;
+    localStorage.setItem('parts-bin', JSON.stringify(d)); localStorage.setItem('sr.cat', '""'); dispatchEvent(new StorageEvent('storage', { key: 'parts-bin' })); });
+  await page.goto(base + '#bins'); await page.waitForSelector('.bin');
+}
+
 // ---- works offline once it has been opened: the inventory, the screens and the fonts, with no network at all
 const offCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
 const off = await offCtx.newPage();

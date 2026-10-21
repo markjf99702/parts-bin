@@ -2,10 +2,10 @@
 // Anything the person saves lives in localStorage, not here.
 // Network first, so a new version shows up as soon as you're online.
 
-const CACHE = 'parts-bin-v4'; // bump the number when the file list changes
+const CACHE = 'parts-bin-v5'; // bump the number when the file list changes
 const SHELL = [
   './', 'index.html', 'carry.js', 'icon.svg', 'manifest.webmanifest',
-  'css/app.css', 'js/app.js', 'js/store.js', 'js/model.js', 'js/sync.js', 'js/ai.js', 'js/inbox.js', 'js/bom.js',
+  'css/app.css', 'js/app.js', 'js/store.js', 'js/model.js', 'js/sync.js', 'js/ai.js', 'js/inbox.js', 'js/bom.js', 'js/bags.js',
   'fonts/barlow-400.woff2', 'fonts/barlow-500.woff2', 'fonts/barlow-600.woff2', 'fonts/barlow-condensed-600.woff2', 'fonts/barlow-condensed-700.woff2', 'fonts/jetbrains-mono-500.woff2',
 ];
 

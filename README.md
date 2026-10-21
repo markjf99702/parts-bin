@@ -15,6 +15,7 @@
 
 - **Pack.** Pick the bin or box you're filling, type what's in the bag and pick the match (or a new part), check the count, save. The tag screen opens already listening: hold a blank sticker to the phone and it gets that bag's link. The next bag number is waiting.
 - **Tap a tag to find a bag.** While Parts Bin is open it listens for tags, so holding any bag or bin sticker to the phone opens it right here. (The first time, tap the tag button by the search box to allow NFC; after that it starts by itself.) Tags written by the old Stockroom artifact open here too, with an offer to rewrite them so they open Parts Bin even when the page is closed.
+- **One bag, one number.** Two devices numbering bags before they've synced can give out the same number. When that happens, Bins, Parts and Pack say so, Parts › *Bag numbers to sort out* lists both parts (the one with the tag first, as its sticker carries the number) and the numbers no part has, and the other part's page gives it the next number and writes its tag. A tag for a number on two parts opens the one with the tag.
 - **BOM check.** Paste a parts list, or pick a saved one, and get have / short / missing with where each part lives, plus a shopping list.
 - **Boxes for a move.** A box is a container like a bin; each part remembers which bin it came out of, and a box page prints its packing list.
 - **Same on every device.** Turn on Google Drive in Settings and the inventory is saved to a "Parts Bin" folder in your Drive and merged part by part with your other devices. Without it, everything stays in this browser.
@@ -52,6 +53,7 @@ GitHub Pages serves it from `main`, `/ (root)`.
 - `js/model.js`: the inventory document and the item-by-item merge; unit-tested in `test/model.test.mjs`.
 - `js/store.js`: keeps it in localStorage and imports Stockroom exports and backups.
 - `js/bom.js`: BOM check's reading of a parts list and matching each line against the inventory; unit-tested in `test/bom.test.mjs`.
+- `js/bags.js`: bag numbers on more than one part, numbers on none, and which part a bag's tag opens; unit-tested in `test/bags.test.mjs`.
 - `js/inbox.js`: reads a batch from a link, a pasted code or a file, keeps only the fields it knows, and works out what a suggestion would change; unit-tested in `test/inbox.test.mjs`.
 - `skill/parts-bin-cataloger/SKILL.md`: the Claude skill that turns photos, receipts and links into a batch. The script that builds the link is at the end of it, and the tests check that its links open here.
 - `js/sync.js`: optional Google Drive saving, the junkdrawer.works way.

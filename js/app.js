@@ -4,6 +4,7 @@ import { drive } from './sync.js';
 import { ai, makeSample, DEFAULT_MODEL } from './ai.js';
 import * as IN from './inbox.js';
 import { norm, parseBom, matchPart, shortBy } from './bom.js';
+import * as BG from './bags.js';
 // ------------------------------------------------------------------ state
 const S = {
   db: null, user: null, sample: null, assets: null, downloads: null,
@@ -54,6 +55,10 @@ function photoImg(idv){ const u=assetUrl(idv); return u ? `<img src="${u}" alt="
 function isBox(b){ return !!b && b.kind==='box'; }
 function nextBag(){ let m=0; for(const p of S.parts.values()) if(Number(p.bag)>m) m=Number(p.bag); return m+1; }
 function bagStr(n){ return n ? '#'+String(n).padStart(3,'0') : ''; }
+// Bag numbers on more than one part (bags.js), worked out once for each copy of the inventory.
+let clashMemo=null;
+function bagClashes(){ if(clashMemo?.of!==S.parts) clashMemo={of:S.parts, v:new Map(BG.clashes(S.parts.values()))}; return clashMemo.v; }
+function clashOf(p){ return bagClashes().get(BG.bagOf(p)) || null; }
 const APP_URL = location.protocol==='file:' ? 'https://parts-bin.junkdrawer.works/' : location.origin+location.pathname;
 const NFC_OK = ('NDEFReader' in window);
 const FRAMED = (()=>{ try{ return window.self!==window.top; }catch{ return true; } })();
@@ -92,7 +97,7 @@ function render(){
   if(linkCode()){ m.append(h('<div class="empty"><p class="think" style="justify-content:center">Opening the batch…</p></div>')); return; }
   shown=key;
   if(v==='inbox') renderInbox(m);
-  else if(v==='bag'){ const n=Number(S.route.arg); const hit=[...S.parts.values()].find(p=>Number(p.bag)===n); if(hit) renderPartPage(m, hit.id); else m.append(h(`<div class="empty"><h3>No bag ${esc(bagStr(n))}</h3><p>Nothing in the inventory has that bag number yet.</p></div>`)); }
+  else if(v==='bag'){ const n=Number(S.route.arg); const hit=BG.opens(S.parts.values(), n); if(hit) renderPartPage(m, hit.id); else m.append(h(`<div class="empty"><h3>No bag ${esc(bagStr(n))}</h3><p>Nothing in the inventory has that bag number yet.</p></div>`)); }
   else if(v==='settings') renderSettings(m);
   else if(v==='bin') renderBin(m, S.route.arg);
   else if(v==='part') renderPartPage(m, S.route.arg);
@@ -138,6 +143,7 @@ function topbar(m, title, extra=''){
 // ---- Bins
 function renderBins(m){
   const tb=topbar(m,'Bins', S.canWrite?`<button class="btn primary" id="addbin">${ICONS.plus} Bin</button>`:'');
+  clashBar(m);
   tb.querySelector('#addbin')?.addEventListener('click',()=>editBin(null));
   if(S.q){ renderSearchResults(m); return; }
   const bins=searchBins('');
@@ -179,8 +185,28 @@ function binRow(b){
 }
 function partRow(p, showBin){
   const b=binOf(p);
-  const r=h(`<button type="button" class="item ${isLow(p)?'low':''}"><div><div class="t">${esc(p.name)}</div><div class="s">${p.bag?`<span class="bagno">${bagStr(p.bag)}</span>`:''}${showBin&&b?`<span class="label ${isBox(b)?'box':''}">${esc(b.code)}</span>`:''}${p.category?`<span>${esc(p.category)}</span>`:''}${p.mpn?`<span class="mono">${esc(p.mpn)}</span>`:''}${(p.tags||[]).slice(0,3).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}${p.check?'<span class="chip warn">check</span>':''}</div></div><div class="q">${esc(fmtQty(p))}${isLow(p)?'<small>low</small>':''}</div></button>`);
+  const r=h(`<button type="button" class="item ${isLow(p)?'low':''}"><div><div class="t">${esc(p.name)}</div><div class="s">${p.bag?`<span class="bagno">${bagStr(p.bag)}</span>`:''}${showBin&&b?`<span class="label ${isBox(b)?'box':''}">${esc(b.code)}</span>`:''}${p.category?`<span>${esc(p.category)}</span>`:''}${p.mpn?`<span class="mono">${esc(p.mpn)}</span>`:''}${(p.tags||[]).slice(0,3).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}${p.check?'<span class="chip warn">check</span>':''}${clashOf(p)?'<span class="chip warn">bag used twice</span>':''}</div></div><div class="q">${esc(fmtQty(p))}${isLow(p)?'<small>low</small>':''}</div></button>`);
   r.onclick=()=>go('part',p.id); return r;
+}
+
+// ---- bag numbers on more than one part
+function clashBar(m){
+  const c=bagClashes(); if(!c.size) return;
+  const nums=[...c.keys()], list=nums.slice(0,6).map(bagStr).join(', ')+(nums.length>6?` and ${nums.length-6} more`:'');
+  const el=h(`<div class="checknote clashbar"><div><b>${nums.length===1?`Bag ${list} is`:`Bags ${list} are each`} on more than one part.</b> Two devices numbered bags before they synced. Keep the number on the bag with the tag.</div><button class="btn sm" id="showclash">Sort them out</button></div>`);
+  el.querySelector('#showclash').onclick=()=>{ const here=S.route.view==='parts'; localSet('sr.cat','__clash'); S.q=''; if(here) render(); else go('parts'); };
+  m.append(el);
+}
+function gapNote(m){
+  const g=BG.gaps(S.parts.values()); if(!g.length) return;
+  const list=g.slice(0,30).map(bagStr).join(', ')+(g.length>30?` and ${g.length-30} more`:'');
+  m.append(h(`<p class="tiny gapnote" style="margin:-4px 0 12px">On no part: ${list}. A bag with one of these numbers isn’t logged yet, or the number was skipped or its part deleted.</p>`));
+}
+let knownClash=null;
+function noteNewClashes(){
+  const now=[...bagClashes().keys()];
+  if(knownClash){ const fresh=now.filter(n=>!knownClash.has(n)); if(fresh.length) toast(`${fresh.length===1?'Bag '+bagStr(fresh[0])+' is':'Bags '+fresh.map(bagStr).join(', ')+' are'} now on more than one part. Parts › Bag numbers to sort out.`,5000); }
+  knownClash=new Set(now);
 }
 
 // ---- Bin page
@@ -225,13 +251,16 @@ function printList(b, ps){
 function renderParts(m){
   const cats=[...new Set([...S.parts.values()].map(p=>p.category).filter(Boolean))].sort();
   const cur=localGet('sr.cat','');
-  const tb=topbar(m,'Parts', `<select id="cat" aria-label="Category" style="width:auto"><option value="">All categories</option>${cats.map(c=>`<option ${c===cur?'selected':''}>${esc(c)}</option>`).join('')}<option value="__low" ${cur==='__low'?'selected':''}>Low stock</option><option value="__unbagged" ${cur==='__unbagged'?'selected':''}>Not yet bagged</option><option value="__bagged" ${cur==='__bagged'?'selected':''}>Bagged</option><option value="__check" ${cur==='__check'?'selected':''}>To check</option></select>${S.canWrite?`<button class="btn primary" id="addp">${ICONS.plus} Part</button>`:''}`);
+  const tb=topbar(m,'Parts', `<select id="cat" aria-label="Category" style="width:auto"><option value="">All categories</option>${cats.map(c=>`<option ${c===cur?'selected':''}>${esc(c)}</option>`).join('')}<option value="__low" ${cur==='__low'?'selected':''}>Low stock</option><option value="__unbagged" ${cur==='__unbagged'?'selected':''}>Not yet bagged</option><option value="__bagged" ${cur==='__bagged'?'selected':''}>Bagged</option><option value="__check" ${cur==='__check'?'selected':''}>To check</option><option value="__clash" ${cur==='__clash'?'selected':''}>Bag numbers to sort out</option></select>${S.canWrite?`<button class="btn primary" id="addp">${ICONS.plus} Part</button>`:''}`);
   tb.querySelector('#cat').onchange=e=>{ localSet('sr.cat',e.target.value); render(); };
   tb.querySelector('#addp')?.addEventListener('click',()=>editPart({}));
+  if(cur==='__clash') gapNote(m); else clashBar(m);
   let parts=searchParts(S.q);
-  if(cur==='__low') parts=parts.filter(isLow); else if(cur==='__unbagged') parts=parts.filter(p=>!p.bag); else if(cur==='__bagged') parts=parts.filter(p=>p.bag); else if(cur==='__check') parts=parts.filter(p=>p.check); else if(cur) parts=parts.filter(p=>p.category===cur);
+  if(cur==='__clash') parts=bagClashes().size ? [...bagClashes().values()].flat().filter(p=>parts.includes(p)) : [];
+  else if(cur==='__low') parts=parts.filter(isLow); else if(cur==='__unbagged') parts=parts.filter(p=>!p.bag); else if(cur==='__bagged') parts=parts.filter(p=>p.bag); else if(cur==='__check') parts=parts.filter(p=>p.check); else if(cur) parts=parts.filter(p=>p.category===cur);
   if(cur==='__bagged') parts.sort((a,b)=>Number(a.bag)-Number(b.bag));
-  else if(!S.q) parts.sort((a,b)=>a.name.localeCompare(b.name));
+  else if(!S.q && cur!=='__clash') parts.sort((a,b)=>a.name.localeCompare(b.name));
+  if(!parts.length && cur==='__clash' && !S.q){ m.append(h('<div class="empty"><p>No bag number is on more than one part.</p></div>')); return; }
   if(!parts.length){ m.append(h(`<div class="empty"><p>${S.parts.size?'No parts match.':'No parts here yet. Add one, or use Pack to bag and tag them as you go.'}</p></div>`)); return; }
   const l=h('<div class="list"></div>'); for(const p of parts) l.append(partRow(p,true)); m.append(l);
 }
@@ -259,6 +288,16 @@ function renderPartPage(m, pid){
     q.querySelector('#dec').onclick=()=>step(-1); q.querySelector('#inc').onclick=()=>step(1);
     inp.onchange=()=>save(inp.value);
   } else m.append(h(`<div class="muted" style="margin-bottom:12px">Quantity: ${esc(fmtQty(p))}</div>`));
+  const cl=clashOf(p);
+  if(cl){
+    const others=cl.filter(x=>x.id!==p.id), mine=!!p.tagWritten, theirs=others.some(x=>x.tagWritten), nb=nextBag();
+    const advice = mine&&!theirs ? `This bag has the tag, so give ${others.length===1?'the other part':'the others'} a new number.`
+      : !mine&&theirs ? `${others.length===1?'That one has':'One of those has'} the tag, so give this one a new number.`
+      : 'Give one of them a new number, and write it on its bag.';
+    const c=h(`<div class="checknote clash"><div><b>Bag ${esc(bagStr(BG.bagOf(p)))} is on ${cl.length} parts.</b> Also on ${others.map(x=>`<a href="#part/${esc(x.id)}">${esc(x.name)}</a>${binOf(x)?` (${esc(binOf(x).code)})`:''}`).join(', ')}. ${advice}</div>${S.canWrite?`<button class="btn sm" id="renumber">New number: ${esc(bagStr(nb))}</button>`:''}</div>`);
+    c.querySelector('#renumber')?.addEventListener('click',()=>editPart({...p, bag:nb},{tag:true}));
+    m.append(c);
+  }
   if(p.check){
     const c=h(`<div class="checknote"><div><b>Check before trusting it.</b> ${esc(p.check)}</div>${S.canWrite?'<button class="btn sm" id="checked">Checked, it’s right</button>':''}</div>`);
     c.querySelector('#checked')?.addEventListener('click',async()=>{ try{ await S.db.doc('parts/'+p.id).update({check:''}); toast('Marked as checked'); }catch(e){ writeFail(e); } });
@@ -326,6 +365,7 @@ function renderScan(m){
   const tb=h(`<div class="topbar"><h2>Pack</h2>${S.canWrite?`<button class="btn" id="toinbox">${ICONS.inbox} Inbox${inboxCount()?` <span class="count">${inboxCount()}</span>`:''}</button>`:''}</div>`);
   m.append(tb); tb.querySelector('#toinbox')?.addEventListener('click',()=>go('inbox'));
   if(!S.canWrite){ m.append(h('<div class="empty"><p>This view is read-only.</p></div>')); return; }
+  clashBar(m);
   const conts=[...S.bins.values()].sort((x,y)=>(isBox(y)-isBox(x))||binCodeSort(x,y));
   let dest=localGet('sr.packbox',''); if(!S.bins.has(dest)) dest='';
   const nb=nextBag();
@@ -617,7 +657,7 @@ function tagTarget(u){
 function findTarget(t){
   if(t.view==='bin') { const b=S.bins.get(t.arg); return b&&{kind:'bin',item:b}; }
   if(t.view==='part'){ const p=S.parts.get(t.arg); return p&&{kind:'part',item:p}; }
-  const n=Number(t.arg); const p=[...S.parts.values()].find(x=>Number(x.bag)===n); return p&&{kind:'part',item:p};
+  const p=BG.opens(S.parts.values(), t.arg); return p&&{kind:'part',item:p};
 }
 function onTag(ev){
   if(document.querySelector('#sheet-root .sheet') || Date.now()-lastWrite<3000) return; // writing, or the tag just written
@@ -905,7 +945,7 @@ let got=0;
 // Settings shows nothing from the inventory, so a change to it there (a sync, another tab) only redraws the counts beside it.
 const inventoryChanged=()=>{ if(parseHash().view==='settings') renderNav(); else render(); };
 localDb.collection('bins').onSnapshot(snap=>{ S.bins=new Map(snap.docs.map(d=>[d.id,{id:d.id,...d.data()}])); if(S.loaded) inventoryChanged(); else if(++got>=2){ S.loaded=true; render(); } });
-localDb.collection('parts').onSnapshot(snap=>{ S.parts=new Map(snap.docs.map(d=>[d.id,{id:d.id,...d.data()}])); if(S.loaded) inventoryChanged(); else if(++got>=2){ S.loaded=true; render(); } });
+localDb.collection('parts').onSnapshot(snap=>{ S.parts=new Map(snap.docs.map(d=>[d.id,{id:d.id,...d.data()}])); noteNewClashes(); if(S.loaded) inventoryChanged(); else if(++got>=2){ S.loaded=true; render(); } });
 localDb.collection('projects').onSnapshot(snap=>{ S.projects=new Map(snap.docs.map(d=>[d.id,{id:d.id,...d.data()}])); if(S.loaded&&S.route.view==='bom') render(); });
 render();
 store.onSave(()=>drive.changed()); // a change that couldn't be kept is refused where it was made (writeFail)
