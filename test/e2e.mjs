@@ -782,6 +782,7 @@ await desk.goto(base);
   // the tag for that number opens the bag that has the tag, which names the other part
   await page.goto(base + '#bag/' + pad(n)); await page.waitForSelector('.clash');
   assert.equal(await page.textContent('.binhead h2'), tp.name);
+  assert.equal(await page.locator('.binhead .bagbadge.twice').count(), 1); // the number under the photo turns amber too
   assert.match(await page.textContent('.clash'), /Also on Buzzer module.*give the other part a new number/);
   // the other part takes the next number, and its tag is written in the same go
   await page.click('.clash a'); await page.waitForSelector('.binhead h2:text-is("Buzzer module")'); await page.waitForSelector('#renumber');

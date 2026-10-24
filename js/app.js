@@ -272,10 +272,12 @@ function renderPartPage(m, pid){
   head.querySelector('#edit')?.addEventListener('click',()=>editPart(p));
   if(S.canWrite){ const tg=h(`<button class="btn sm">${ICONS.nfc} Bag tag</button>`); tg.onclick=()=>tagSheet(p,'part'); head.querySelector('#edit').before(tg); }
   const ref=!assetUrl(p.photo)&&p.img;
-  m.append(h(`<div class="binhead"><div class="photo${ref?' refphoto':''}"${ref?' role="button" tabindex="0" aria-label="Reference photo, tap to enlarge"':''}>${photoImg(p.photo)||ICONS.parts+refImg(p)}</div><div>
+  // the bag number sits under the photo, big enough to match against the bag across the bench
+  const bagTag=p.bag?`<div class="bagbadge${clashOf(p)?' twice':''}"><small>Bag</small><span class="bagno">${bagStr(p.bag)}</span></div>`:'';
+  m.append(h(`<div class="binhead"><div class="lead"><div class="photo${ref?' refphoto':''}"${ref?' role="button" tabindex="0" aria-label="Reference photo, tap to enlarge"':''}>${photoImg(p.photo)||ICONS.parts+refImg(p)}</div>${bagTag}</div><div>
     <h2>${esc(p.name)}</h2>
     <div class="row" style="gap:6px;margin:4px 0 8px">${p.category?`<span class="chip">${esc(p.category)}</span>`:''}${specChips(p)}${(p.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}${isLow(p)?'<span class="chip warn">low stock</span>':''}</div>
-    <div class="muted">${p.bag?`<span class="bagno">${bagStr(p.bag)}</span> `:''}${b?`In <a href="#bin/${b.id}"><span class="label ${isBox(b)?'box':''}">${esc(b.code)}</span></a> ${esc(b.name||'')}${b.location?` · ${esc(b.location)}`:''}`:'Not in a bin'}${p.from?` <span class="tiny">· was in ${esc(p.from)}</span>`:''}</div>
+    <div class="muted">${b?`In <a href="#bin/${b.id}"><span class="label ${isBox(b)?'box':''}">${esc(b.code)}</span></a> ${esc(b.name||'')}${b.location?` · ${esc(b.location)}`:''}`:'Not in a bin'}${p.from?` <span class="tiny">· was in ${esc(p.from)}</span>`:''}</div>
     ${p.mpn?`<div class="tiny mono" style="margin-top:4px">${esc(p.mpn)}</div>`:''}
     ${/^https?:\/\//i.test(p.link||'')?`<div class="tiny" style="margin-top:4px"><a href="${esc(p.link)}" target="_blank" rel="noopener">Product link</a></div>`:''}
   </div></div>`));

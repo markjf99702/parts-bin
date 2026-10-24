@@ -168,6 +168,13 @@ a{color:var(--accent-ink)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .label.box{background:var(--accent);color:var(--on-accent)}
 .bagno{font-family:"JetBrains Mono",monospace;font-weight:600;font-size:12px;color:var(--ink2);background:var(--panel2);padding:1px 6px;border-radius:3px}
+.binhead .lead{display:flex;flex-direction:column;gap:8px;min-width:0}
+.bagbadge{border:2px solid var(--ink);border-radius:var(--r);background:var(--panel);text-align:center;padding:4px 4px 6px;line-height:1}
+.bagbadge small{display:block;font-size:10.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);margin-bottom:2px}
+.bagbadge .bagno{display:block;background:none;padding:0;border-radius:0;color:var(--ink);font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+@media(max-width:480px){.bagbadge .bagno{font-size:26px}}
+.bagbadge.twice{border-color:var(--warn);background:var(--warn-soft)}
+.bagbadge.twice .bagno,.bagbadge.twice small{color:var(--warn)}
 .packhead{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px;align-items:center}
 .packhead .big{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:40px;line-height:1;font-variant-numeric:tabular-nums}
 .packhead .lbl{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:600}
